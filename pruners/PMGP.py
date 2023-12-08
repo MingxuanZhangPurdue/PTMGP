@@ -121,6 +121,7 @@ class PMGP(object):
         return mask_threshold
    
     def magnitude_pruning(self, train_step_index):
+        
         # Get the remaining ratio
         ratio, mask_ind = self.cubic_remaining_ratio_scheduler(train_step_index)
         if mask_ind:
