@@ -4,7 +4,14 @@ import numpy as np
 
 def set_PMGP(model, train_size, max_train_steps, args):
 
-    return 0
+    pruner = PMGP(model, train_size, max_train_steps,
+                  final_ratio=args.final_ratio, initial_ratio=args.initial_ratio,
+                  sigma0=args.sigma0, sigma1=args.sigma1, lambda_mix=args.lambda_mix,
+                  anneal_start=args.anneal_start, anneal_end=args.anneal_end,
+                  initial_warmup=args.initial_warmup, final_warmup=args.final_warmup,
+                  warmup_steps=args.warmup_steps, deltaT=args.deltaT,
+                  non_mask_name=args.non_mask_name)
+    return pruner
 
 
 class PMGP(object):
