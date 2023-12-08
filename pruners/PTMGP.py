@@ -35,7 +35,7 @@ class PMGP(object):
         self.initial_warmup = initial_warmup
         self.final_warmup = final_warmup
         self.warmup_steps = warmup_steps
-        self.deltat = deltaT
+        self.deltaT = deltaT
         
         cubic_prune_start = anneal_end + initial_warmup*warmup_steps
         cubic_prune_end = max_train_steps - final_warmup*warmup_steps
