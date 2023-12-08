@@ -13,7 +13,7 @@ class PMGP(object):
                  final_ratio=1, initial_ratio=1,
                  sigma0=1e-12, sigma1=0.1, lambda_mix=1e-7,
                  anneal_start = 0, anneal_end = 0,
-                 initial_warmup = 0.0, final_warmup = 1, warmup_steps = 1000,
+                 initial_warmup = 0.0, final_warmup = 1, warmup_steps = 1000, deltaT = 1,
                  non_mask_name=None):
         
         self.train_size = train_size
@@ -35,6 +35,7 @@ class PMGP(object):
         self.initial_warmup = initial_warmup
         self.final_warmup = final_warmup
         self.warmup_steps = warmup_steps
+        self.deltat = deltaT
         
         cubic_prune_start = anneal_end + initial_warmup*warmup_steps
         cubic_prune_end = max_train_steps - final_warmup*warmup_steps
