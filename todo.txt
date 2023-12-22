@@ -1,4 +1,6 @@
 Models:
-Bert-large-uncased
-GPT-2
-Llama-2-7b
+    Bert-large-uncased: GLUE
+    GPT-2: Open WebText
+    Llama-2-7b: RedPajama
+
+

@@ -1,7 +1,6 @@
 import torch
-import numpy as np
 
-# calculate a magnitude mask threshold for a given sparsity
+# calculate the magnitude mask threshold for a given sparsity
 @torch.no_grad()
 def calculate_magnitude_mask_threshold(model, sparsity, non_mask_name=None):
         
@@ -16,7 +15,7 @@ def calculate_magnitude_mask_threshold(model, sparsity, non_mask_name=None):
     mask_threshold = torch.kthvalue(all_is, int(all_is.shape[0] * sparsity))[0].item()
     return mask_threshold
 
-# create a mask for a given magnitude mask threshold
+# create the mask for a given magnitude mask threshold
 @torch.no_grad()
 def create_magnitude_mask(model, non_mask_name=None, mask_threshold=0.0):
 
@@ -31,7 +30,7 @@ def create_magnitude_mask(model, non_mask_name=None, mask_threshold=0.0):
 
     return mask, n_masked_params/n_params
 
-# zero out weigths for a given mask
+# zero out weights for a given mask
 @torch.no_grad()
 def prune_masked_weights(model, mask, non_mask_name=None):
 
