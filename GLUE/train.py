@@ -283,3 +283,7 @@ def main():
     trainer.fit()
 
 
+
+if __name__ == "__main__":
+    main()
+
