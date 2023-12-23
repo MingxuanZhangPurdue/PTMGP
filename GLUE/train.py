@@ -9,7 +9,6 @@ from datasets import load_dataset
 from torch.utils.data import DataLoader
 
 import torch
-import transformers
 from transformers import (
     AutoConfig,
     AutoModelForSequenceClassification,
@@ -22,6 +21,8 @@ from composer.utils import dist
 from composer.models.huggingface import HuggingFaceModel
 from torchmetrics.classification import MulticlassAccuracy, MulticlassMatthewsCorrCoef, MulticlassF1Score
 from torchmetrics.regression import SpearmanCorrCoef, PearsonCorrCoef
+from composer import Trainer
+from composer.loggers import WandBLogger, FileLogger, ProgressBarLogger
 
 
 task_to_keys = {
@@ -37,7 +38,9 @@ task_to_keys = {
 }
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Finetune and prune a transformers model on a glue task")
+    parser = argparse.ArgumentParser(description="Finetune and prune a transformers model on a glue task.")
+    
+    # required arguments
     parser.add_argument(
         "--task_name",
         type=str,
@@ -51,6 +54,8 @@ def parse_args():
         help="Path to pretrained model or model identifier from huggingface.co/models.",
         required=True,
     )
+
+    # dataset, model, and tokenizer
     parser.add_argument(
         "--cache_dir",
         type=str,
@@ -81,6 +86,22 @@ def parse_args():
             " sequences shorter will be padded if `--pad_to_max_length` is passed."
         ),
     )
+
+    # checkpointing
+    parser.add_argument("--run_name", type=str, default=None, help="Name of the run.")
+    parser.add_argument("--save_folder", type=str, default=None, help="Folder to save the checkpoints.")
+    parser.add_argument("--save_filename", type=str, default='ep{epoch}-ba{batch}-rank{rank}.pt', help="Filename to save the checkpoints.")
+    parser.add_argument("--save_interval", type=str, default="1ep", help="Interval to save the checkpoints.")
+    parser.add_argument("--save_last_filename", type=str, default='latest-rank{rank}.pt', help="Filename to save the last checkpoint.")
+    parser.add_argument("--autoresume", action="store_true", help="If passed, will resume the latest checkpoint if any.")
+    parser.add_argument("--save_overwrite", action="store_true", help="If passed, will overwrite the checkpoints if any.")
+
+
+    # evaluation
+    parser.add_argument("--eval_interval", type=str, default="1ep", help="Interval to evaluate the model.")
+    parser.add_argument("--per_device_eval_batch_size", type=int, default=8, help="Batch size (per device) for the evaluation dataloader.")
+
+    # training setups
     parser.add_argument(
         "--precision",
         type=str,
@@ -95,35 +116,22 @@ def parse_args():
         help="Batch size (per device) for the training dataloader.",
     )
     parser.add_argument(
-        "--per_device_eval_batch_size",
-        type=int,
-        default=8,
-        help="Batch size (per device) for the evaluation dataloader.",
-    )
-    parser.add_argument(
         "--learning_rate",
         type=float,
         default=5e-5,
         help="Initial learning rate (after the potential warmup period) to use.",
     )
     parser.add_argument("--weight_decay", type=float, default=0.0, help="Weight decay to use.")
-    parser.add_argument("--num_train_epochs", type=int, default=3, help="Total number of training epochs to perform.")
-    parser.add_argument(
-        "--max_train_steps",
-        type=int,
-        default=None,
-        help="Total number of training steps to perform. If provided, overrides num_train_epochs.",
-    )
-    parser.add_argument(
-        "--lr_scheduler_type",
-        type=str,
-        default="LinearWithWarmupScheduler",
-        help="The scheduler type to use.",
-        choices=["MultiStepWithWarmupScheduler", "LinearWithWarmupScheduler", "CosineAnnealingWithWarmupScheduler"],
-    )
-    parser.add_argument(
-        "--num_warmup_steps", type=int, default=0, help="Number of steps for the warmup in the lr scheduler."
-    )
+    parser.add_argument("--max_duration", type=str, default="1ep", help="Total number of training epochs/batches/steps to perform.")
+    parser.add_argument("--t_warmup", type=str, default="0ba", help="Number of steps for the warmup in the lr scheduler.")
+
+    # logging
+    parser.add_argument("--loggers", type=str, nargs='+', default=[], help="Loggers to use.")
+    parser.add_argument("--log_to_console", action="store_true", help="If passed, will log to console.")
+
+    # reproducibility
+    parser.add_argument("--seed", type=int, default=42, help="Random seed to use for reproducibility.")
+
     args = parser.parse_args()
     return args
 
@@ -169,7 +177,7 @@ def main():
         ignore_mismatched_sizes=args.ignore_mismatched_sizes,
     )
 
-    # Get the metrics
+    # get the metrics
     if args.task_name == "stsb":
         metrics = [PearsonCorrCoef(), SpearmanCorrCoef()]
     elif args.task_name == "cola":
@@ -179,24 +187,24 @@ def main():
     else:
         metrics = [MulticlassAccuracy(num_classes=num_labels, average='micro')]
 
-    # Wrap the model
+    # wrap the model
     composer_model = HuggingFaceModel(model, tokenizer=tokenizer, metrics=metrics)
 
-    #preprocess the raw_datasets
+    # preprocess the raw_datasets
     sentence1_key, sentence2_key = task_to_keys[args.task_name]
 
-    # Padding strategy
+    # padding strategy
     padding = "max_length" if args.pad_to_max_length else False
 
     def preprocess_function(examples):
-        # Tokenize the texts
+        # tokenize the texts
         texts = (
             (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
         )
         result = tokenizer(*texts, padding=padding, max_length=args.max_length, truncation=True)
 
         if "label" in examples:
-            # In all cases, rename the column to labels because the model will expect that.
+            # in all cases, rename the column to labels because the model will expect that.
             result["labels"] = examples["label"]
         return result
     
@@ -211,7 +219,7 @@ def main():
     train_dataset = processed_datasets["train"]
     eval_dataset = processed_datasets["validation_matched" if args.task_name == "mnli" else "validation"]
 
-    # DataLoaders creation:
+    # dataLoaders creation:
     if args.pad_to_max_length:
         # If padding was already done ot max length, we use the default data collator that will just convert everything
         # to tensors.
@@ -232,6 +240,46 @@ def main():
     train_dataloader = DataLoader(train_dataset, collate_fn=data_collator, batch_size=args.per_device_train_batch_size, sampler=train_sampler)
     eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size, sampler=eval_sampler)
 
-    # Optimizer
+    # optimizer and lr_scheduler creation
     optimizer = torch.optim.AdamW(composer_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    lr_scheduler = composer.optim.LinearWithWarmupScheduler(optimizer, t_warmup=args.t_warmup, t_max=args.max_duration)
+
+
+    trainer = Trainer(
+        model=composer_model,
+        train_dataloader=train_dataloader,
+        eval_dataloader=eval_dataloader,
+        optimizers=optimizer,
+        max_duration=args.max_duration,
+        device_train_microbatch_size='auto',
+        device='gpu' if torch.cuda.is_available() else 'cpu',
+        precision=args.precision,
+        schedulers=lr_scheduler,
+        eval_interval=args.eval_interval,
+
+        # logging
+        loggers=None,
+
+        # callbacks
+        callbacks=None,
+
+        # algorithms
+        algorithms=None,
+
+        # checkpointing
+        run_name=args.run_name,
+        save_folder=args.save_folder,
+        save_filename=args.save_filename,
+        save_interval=args.save_interval,
+        save_last_filename=args.save_last_filename,
+        save_overwrite=args.save_overwrite,
+        autoresume=args.autoresume,
+
+        # reproducibility
+        seed=args.seed,
+    )
+
+    # Train
+    trainer.fit()
+
 
