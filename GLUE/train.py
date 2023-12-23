@@ -93,7 +93,7 @@ def parse_args():
     parser.add_argument("--save_folder", type=str, default=None, help="Folder to save the checkpoints.")
     parser.add_argument("--save_filename", type=str, default='ep{epoch}-ba{batch}-rank{rank}.pt', help="Filename to save the checkpoints.")
     parser.add_argument("--save_interval", type=str, default="1ep", help="Interval to save the checkpoints.")
-    parser.add_argument("--save_last_filename", type=str, default='latest-rank{rank}.pt', help="Filename to save the last checkpoint.")
+    parser.add_argument("--save_latest_filename", type=str, default='latest-rank{rank}.pt', help="Filename to save the last checkpoint.")
     parser.add_argument("--autoresume", action="store_true", help="If passed, will resume the latest checkpoint if any.")
     parser.add_argument("--save_overwrite", action="store_true", help="If passed, will overwrite the checkpoints if any.")
 
@@ -124,7 +124,7 @@ def parse_args():
     )
     parser.add_argument("--weight_decay", type=float, default=0.0, help="Weight decay to use.")
     parser.add_argument("--max_duration", type=str, default="1ep", help="Total number of training epochs/batches/steps to perform.")
-    parser.add_argument("--t_warmup", type=str, default="0ba", help="Number of steps for the warmup in the lr scheduler.")
+    parser.add_argument("--t_warmup", type=str, default="1ba", help="Number of steps for the warmup in the lr scheduler.")
 
     # logging
     parser.add_argument("--loggers", type=str, nargs='+', default=[], help="Loggers to use.")
@@ -189,7 +189,7 @@ def main():
         metrics = [MulticlassAccuracy(num_classes=num_labels, average='micro')]
 
     # wrap the model
-    composer_model = HuggingFaceModel(model, tokenizer=tokenizer, metrics=metrics)
+    composer_model = HuggingFaceModel(model, tokenizer=tokenizer, metrics=metrics, use_logits=True)
 
     # preprocess the raw_datasets
     sentence1_key, sentence2_key = task_to_keys[args.task_name]
@@ -243,7 +243,7 @@ def main():
 
     # optimizer and lr_scheduler creation
     optimizer = torch.optim.AdamW(composer_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-    lr_scheduler = composer.optim.LinearWithWarmupScheduler(optimizer, t_warmup=args.t_warmup, t_max=args.max_duration)
+    lr_scheduler = composer.optim.LinearWithWarmupScheduler(t_warmup=args.t_warmup, t_max=args.max_duration)
 
 
     trainer = Trainer(
@@ -272,7 +272,7 @@ def main():
         save_folder=args.save_folder,
         save_filename=args.save_filename,
         save_interval=args.save_interval,
-        save_last_filename=args.save_last_filename,
+        save_latest_filename=args.save_latest_filename,
         save_overwrite=args.save_overwrite,
         autoresume=args.autoresume,
 
