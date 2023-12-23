@@ -17,6 +17,7 @@ from transformers import (
     default_data_collator,
 )
 
+import composer
 from composer.utils import dist
 from composer.models.huggingface import HuggingFaceModel
 from torchmetrics.classification import MulticlassAccuracy, MulticlassMatthewsCorrCoef, MulticlassF1Score
