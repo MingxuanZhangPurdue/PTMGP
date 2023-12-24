@@ -18,6 +18,7 @@ from transformers import (
 )
 
 import composer
+from composer import Time, TimeUnit
 from composer.utils import dist
 from composer.models.huggingface import HuggingFaceModel
 from torchmetrics.classification import MulticlassAccuracy, MulticlassMatthewsCorrCoef, MulticlassF1Score
@@ -25,6 +26,7 @@ from torchmetrics.regression import SpearmanCorrCoef, PearsonCorrCoef
 from composer import Trainer
 from composer.callbacks import LRMonitor, RuntimeEstimator
 from composer.loggers import WandBLogger
+from pruners.PMGP import set_PMGP_Algorithm
 
 
 task_to_keys = {
@@ -133,10 +135,25 @@ def parse_args():
     # reproducibility
     parser.add_argument("--seed", type=int, default=42, help="Random seed to use for reproducibility.")
 
+    # PMGP
+    parser.add_argument("--final_ratio", type=float, default=0.1, help="The final ratio of the remaining weights.")
+    parser.add_argument("--initial_ratio", type=float, default=1, help="The initial ratio of the remaining weights.")
+
+    parser.add_argument("--sigma0", type=float, default=1e-12, help="The smaller variance of the Mixture Gaussian prior.")
+    parser.add_argument("--sigma1", type=float, default=0.1, help="The larger variance of the Mixture Gaussian orior.")
+    parser.add_argument("--lambda_mix", type=float, default=1e-7, help="The mixing coefficient of the Mixture Gaussian prior.")
+    parser.add_argument("--anneal_start", type=int, default=0, help="The number of traing batches/steps for annealing to start.")
+    parser.add_argument("--anneal_end", type=int, default="1ep", help="The number of traing batches/steps for annealing to end.")
+
+    parser.add_argument("--initial_warmup", type=int, default=1, help="The number of training batches/steps for initial warmup.")
+    parser.add_argument("--final_warmup", type=int, default=1, help="The number of training batches/steps for final warmup.")
+    parser.add_argument("--warmup_steps", type=int, default=100, help="The number of warmup steps.")
+    parser.add_argument("--deltaT", type=int, default=10, help="The interval to mask weights.")
+
+    parser.add_argument('--non_mask_name', nargs='+', type=str, default=["layernorm", "classifier", "pooler"])
+
     args = parser.parse_args()
     return args
-
-
 
 
 def main():
@@ -251,6 +268,17 @@ def main():
         name=args.wandb_name
     )
 
+    # initialize the PMGP algorithm
+    train_size = len(train_dataset)
+    train_time = Time.from_timestring(args.max_duration)
+    if train_time.unit == TimeUnit.EPOCH:
+        max_train_steps = len(train_dataloader) * train_time.value
+    elif train_time.unit == TimeUnit.BATCH:
+        max_train_steps = train_time.value
+    else:
+        raise ValueError(f"Unsupported time unit: {train_time.unit}")
+    pruner_algorithm = set_PMGP_Algorithm(train_size, max_train_steps, args)
+
     # initialize the trainer
     trainer = Trainer(
 
@@ -275,7 +303,7 @@ def main():
         callbacks=[LRMonitor(), RuntimeEstimator()],
 
         # algorithms
-        algorithms=None,
+        algorithms=[pruner_algorithm],
 
         # checkpointing
         run_name=args.run_name,
