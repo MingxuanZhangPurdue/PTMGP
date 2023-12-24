@@ -23,7 +23,8 @@ from composer.models.huggingface import HuggingFaceModel
 from torchmetrics.classification import MulticlassAccuracy, MulticlassMatthewsCorrCoef, MulticlassF1Score
 from torchmetrics.regression import SpearmanCorrCoef, PearsonCorrCoef
 from composer import Trainer
-from composer.loggers import WandBLogger, FileLogger, ProgressBarLogger
+from composer.callbacks import LRMonitor, RuntimeEstimator
+from composer.loggers import WandBLogger
 
 
 task_to_keys = {
@@ -91,12 +92,11 @@ def parse_args():
     # checkpointing
     parser.add_argument("--run_name", type=str, default=None, help="Name of the run.")
     parser.add_argument("--save_folder", type=str, default=None, help="Folder to save the checkpoints.")
-    parser.add_argument("--save_filename", type=str, default='ep{epoch}-ba{batch}-rank{rank}.pt', help="Filename to save the checkpoints.")
     parser.add_argument("--save_interval", type=str, default="1ep", help="Interval to save the checkpoints.")
-    parser.add_argument("--save_latest_filename", type=str, default='latest-rank{rank}.pt', help="Filename to save the last checkpoint.")
     parser.add_argument("--autoresume", action="store_true", help="If passed, will resume the latest checkpoint if any.")
     parser.add_argument("--save_overwrite", action="store_true", help="If passed, will overwrite the checkpoints if any.")
-
+    parser.add_argument("--save_latest_filename", type=str, default='latest-rank{rank}.pt', help="Filename to save the last checkpoint.")
+    parser.add_argument("--save_filename", type=str, default='ep{epoch}-ba{batch}-rank{rank}.pt', help="Filename to save the checkpoints.")
 
     # evaluation
     parser.add_argument("--eval_interval", type=str, default="1ep", help="Interval to evaluate the model.")
@@ -126,10 +126,10 @@ def parse_args():
     parser.add_argument("--max_duration", type=str, default="1ep", help="Total number of training epochs/batches/steps to perform.")
     parser.add_argument("--t_warmup", type=str, default="1ba", help="Number of steps for the warmup in the lr scheduler.")
 
-    # logging
-    parser.add_argument("--loggers", type=str, nargs='+', default=[], help="Loggers to use.")
-    parser.add_argument("--log_to_console", action="store_true", help="If passed, will log to console.")
-
+    # wandb logging
+    parser.add_argument("--wandb_project", type=str, default=None, help="The wandb project to log to.")
+    parser.add_argument("--wandb_name",    type=str, default=None, help="The wandb run name.")
+    
     # reproducibility
     parser.add_argument("--seed", type=int, default=42, help="Random seed to use for reproducibility.")
 
@@ -245,24 +245,34 @@ def main():
     optimizer = torch.optim.AdamW(composer_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     lr_scheduler = composer.optim.LinearWithWarmupScheduler(t_warmup=args.t_warmup, t_max=args.max_duration)
 
+    # initialize the wandb logger
+    wandb_logger = WandBLogger(
+        project=args.wandb_project,
+        name=args.wandb_name
+    )
 
+    # initialize the trainer
     trainer = Trainer(
+
+        # training
         model=composer_model,
         train_dataloader=train_dataloader,
-        eval_dataloader=eval_dataloader,
         optimizers=optimizer,
         max_duration=args.max_duration,
         device_train_microbatch_size='auto',
         device='gpu' if torch.cuda.is_available() else 'cpu',
         precision=args.precision,
         schedulers=lr_scheduler,
+
+        # evaluation
+        eval_dataloader=eval_dataloader,
         eval_interval=args.eval_interval,
 
         # logging
-        loggers=None,
+        loggers=[wandb_logger],
 
         # callbacks
-        callbacks=None,
+        callbacks=[LRMonitor(), RuntimeEstimator()],
 
         # algorithms
         algorithms=None,
