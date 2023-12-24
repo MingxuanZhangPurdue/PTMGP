@@ -67,7 +67,7 @@ class PMGP_Algorithm(Algorithm):
         
         return c1, c2, prior_threshold
     
-    def add_prior_grad(self, model, train_step_index, device="cuda"):
+    def add_prior_grad(self, model, train_step_index):
         
         anneal_start = self.anneal_start
         anneal_end = self.anneal_end
@@ -88,12 +88,11 @@ class PMGP_Algorithm(Algorithm):
             with torch.no_grad():
                 for n, p in model.named_parameters():
                     if self.whether_mask_para(n):
-                        with torch.autocast(device_type=device):
-                            temp = p.pow(2).mul(c2).add(c1).exp().add(1).pow(-1)
-                            temp = p.div(-sigma_0).mul(temp) + p.div(-sigma_1).mul(1 - temp)
-                            prior_grad = temp.div(self.train_size)
-                            p.grad.data -= anneal_lambda*prior_grad
-        return prior_threshold
+                        temp = p.pow(2).mul(c2).add(c1).exp().add(1).pow(-1)
+                        temp = p.div(-sigma_0).mul(temp) + p.div(-sigma_1).mul(1 - temp)
+                        prior_grad = temp.div(self.train_size)
+                        p.grad.data -= anneal_lambda*prior_grad
+        return prior_threshold, anneal_lambda
     
     def mask_with_threshold(self, model, ratio):
         
@@ -153,10 +152,11 @@ class PMGP_Algorithm(Algorithm):
 
     def apply(self, event, state, logger):
         if event == Event.AFTER_TRAIN_BATCH:
-            prior_threshold = self.add_prior_grad(state.model, state.timestamp.batch, state.device)
+            prior_threshold, anneal_lambda = self.add_prior_grad(state.model, state.timestamp.batch.value)
             logger.log_metrics({"prior_threshold": float(prior_threshold)})
+            logger.log_metrics({"anneal_lambda": float(anneal_lambda)})
         elif event == Event.BATCH_END:
-            ratio, mask_threshold = self.magnitude_pruning(state.model, state.timestamp.batch)
+            ratio, mask_threshold = self.magnitude_pruning(state.model, state.timestamp.batch.value)
             logger.log_metrics({"remaining_ratio": float(ratio)})
             if mask_threshold is None:
                 mask_threshold = 0.0
