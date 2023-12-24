@@ -2,8 +2,6 @@ import argparse
 from dataclasses import dataclass, field
 from typing import Optional
 
-import datasets
-import evaluate
 import numpy as np
 from datasets import load_dataset
 from torch.utils.data import DataLoader
@@ -143,7 +141,7 @@ def parse_args():
     parser.add_argument("--sigma1", type=float, default=0.1, help="The larger variance of the Mixture Gaussian orior.")
     parser.add_argument("--lambda_mix", type=float, default=1e-7, help="The mixing coefficient of the Mixture Gaussian prior.")
     parser.add_argument("--anneal_start", type=int, default=0, help="The number of traing batches/steps for annealing to start.")
-    parser.add_argument("--anneal_end", type=int, default="1ep", help="The number of traing batches/steps for annealing to end.")
+    parser.add_argument("--anneal_end", type=int, default=5000, help="The number of traing batches/steps for annealing to end.")
 
     parser.add_argument("--initial_warmup", type=int, default=1, help="The number of training batches/steps for initial warmup.")
     parser.add_argument("--final_warmup", type=int, default=1, help="The number of training batches/steps for final warmup.")
@@ -281,7 +279,6 @@ def main():
 
     # initialize the trainer
     trainer = Trainer(
-
         # training
         model=composer_model,
         train_dataloader=train_dataloader,
