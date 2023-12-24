@@ -1,7 +1,7 @@
 import torch
 import re
 import numpy as np
-from composer.core import Algoritm, Event
+from composer.core import Algorithm, Event
 
 
 class PMGP_Algorithm(Algorithm):
