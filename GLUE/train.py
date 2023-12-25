@@ -138,7 +138,7 @@ def parse_args():
     parser.add_argument("--initial_ratio", type=float, default=1, help="The initial ratio of the remaining weights.")
 
     parser.add_argument("--sigma0", type=float, default=1e-12, help="The smaller variance of the Mixture Gaussian prior.")
-    parser.add_argument("--sigma1", type=float, default=0.1, help="The larger variance of the Mixture Gaussian orior.")
+    parser.add_argument("--sigma1", type=float, default=0.05, help="The larger variance of the Mixture Gaussian orior.")
     parser.add_argument("--lambda_mix", type=float, default=1e-7, help="The mixing coefficient of the Mixture Gaussian prior.")
     parser.add_argument("--anneal_start", type=int, default=0, help="The number of traing batches/steps for annealing to start.")
     parser.add_argument("--anneal_end", type=int, default=5000, help="The number of traing batches/steps for annealing to end.")
