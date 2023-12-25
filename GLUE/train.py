@@ -16,6 +16,7 @@ from transformers import (
 )
 
 import composer
+from composer.core import Evaluator
 from composer import Time, TimeUnit
 from composer.utils import dist
 from composer.models.huggingface import HuggingFaceModel
@@ -256,6 +257,11 @@ def main():
     train_dataloader = DataLoader(train_dataset, collate_fn=data_collator, batch_size=args.per_device_train_batch_size, sampler=train_sampler)
     eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size, sampler=eval_sampler)
 
+    if args.task_name == "mnli":
+        mm_eval_dataset = processed_datasets["validation_mismatched"]
+        mm_eval_sampler = dist.get_sampler(mm_eval_dataset, shuffle=False)
+        mm_eval_dataloader = DataLoader(mm_eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size, sampler=mm_eval_sampler)
+
     # optimizer and lr_scheduler creation
     optimizer = torch.optim.AdamW(composer_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     lr_scheduler = composer.optim.LinearWithWarmupScheduler(t_warmup=args.t_warmup, t_max=args.max_duration)
@@ -291,7 +297,7 @@ def main():
         schedulers=lr_scheduler,
 
         # evaluation
-        eval_dataloader=eval_dataloader,
+        eval_dataloader=[eval_dataloader, mm_eval_dataloader] if args.task_name == "mnli" else [eval_dataloader],
         eval_interval=args.eval_interval,
 
         # logging
