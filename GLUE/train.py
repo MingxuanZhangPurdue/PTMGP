@@ -264,7 +264,7 @@ def main():
     wandb_logger = WandBLogger(
         project=args.wandb_project,
         name=args.wandb_name,
-        config = vars(args),
+        init_kwargs = {"config": vars(args)}
     )
 
     # initialize the PMGP algorithm
