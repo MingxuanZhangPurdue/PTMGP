@@ -261,6 +261,16 @@ def main():
         mm_eval_dataset = processed_datasets["validation_mismatched"]
         mm_eval_sampler = dist.get_sampler(mm_eval_dataset, shuffle=False)
         mm_eval_dataloader = DataLoader(mm_eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size, sampler=mm_eval_sampler)
+        mnli_matched_task = Evaluator(
+            label='mnli_matched_accuracy',
+            dataloader=eval_dataloader,
+            metric_names=['MulticlassAccuracy']
+        )
+        mnli_mismatched_task = Evaluator(
+            label='mnli_mismatched_accuracy',
+            dataloader=mm_eval_dataloader,
+            metric_names=['MulticlassAccuracy']
+        )
 
     # optimizer and lr_scheduler creation
     optimizer = torch.optim.AdamW(composer_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
@@ -297,7 +307,7 @@ def main():
         schedulers=lr_scheduler,
 
         # evaluation
-        eval_dataloader=[eval_dataloader, mm_eval_dataloader] if args.task_name == "mnli" else [eval_dataloader],
+        eval_dataloader=[mnli_matched_task, mnli_mismatched_task] if args.task_name == "mnli" else eval_dataloader,
         eval_interval=args.eval_interval,
 
         # logging

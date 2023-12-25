@@ -3,4 +3,11 @@ Models:
     GPT-2: Open WebText
     Llama-2-7b: RedPajama
 
+Baselines:
+    PLATON
+    Movement
+    LLM-Pruner
+    CoFi
+    
+
 

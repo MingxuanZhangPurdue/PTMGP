@@ -183,4 +183,4 @@ class PMGP_Algorithm(Algorithm):
             logger.log_metrics({"mask_threshold": float(mask_threshold)})
         elif event == Event.FIT_END:
             final_sparsity = self.calculate_sparsity(state.model)
-            logger.log_metrics({"final sparsity": float(final_sparsity)})
+            logger.log_metrics({"final_sparsity": float(final_sparsity)})
