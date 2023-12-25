@@ -47,6 +47,17 @@ class PMGP_Algorithm(Algorithm):
         self.cubic_prune_start = cubic_prune_start
         self.cubic_prune_end = cubic_prune_end
 
+    @classmethod
+    def from_args(self, train_size, max_train_steps, args):
+        return self(train_size, max_train_steps,
+                    final_ratio=args.final_ratio, initial_ratio=args.initial_ratio,
+                    sigma0=args.sigma0, sigma1=args.sigma1, lambda_mix=args.lambda_mix,
+                    anneal_start=args.anneal_start, anneal_end=args.anneal_end,
+                    initial_warmup=args.initial_warmup, final_warmup=args.final_warmup,
+                    warmup_steps=args.warmup_steps, deltaT=args.deltaT,
+                    non_mask_name=args.non_mask_name
+                    )
+
     def whether_mask_para(self, n):
         if self.non_mask_name_pattern == None:
             return True
