@@ -159,7 +159,7 @@ def main():
     # parse the arguments
     args = parse_args()
 
-    # load the dataset
+    # load the raw datasets
     raw_datasets = load_dataset(
         "glue",
         args.task_name,
@@ -206,7 +206,7 @@ def main():
     # wrap the model
     composer_model = HuggingFaceModel(model, tokenizer=tokenizer, metrics=metrics, use_logits=True)
 
-    # preprocess the raw_datasets
+    # preprocess the raw datasets
     sentence1_key, sentence2_key = task_to_keys[args.task_name]
 
     # padding strategy
@@ -263,7 +263,8 @@ def main():
     # initialize the wandb logger
     wandb_logger = WandBLogger(
         project=args.wandb_project,
-        name=args.wandb_name
+        name=args.wandb_name,
+        config = vars(args),
     )
 
     # initialize the PMGP algorithm
