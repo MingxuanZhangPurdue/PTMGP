@@ -24,7 +24,7 @@ from torchmetrics.regression import SpearmanCorrCoef, PearsonCorrCoef
 from composer import Trainer
 from composer.callbacks import LRMonitor, RuntimeEstimator
 from composer.loggers import WandBLogger
-from pruners.PMGP import set_PMGP_Algorithm
+from pruners.PMGP import PMGP_Algorithm
 
 
 task_to_keys = {
@@ -275,7 +275,7 @@ def main():
         max_train_steps = train_time.value
     else:
         raise ValueError(f"Unsupported time unit: {train_time.unit}")
-    pruner_algorithm = set_PMGP_Algorithm(train_size, max_train_steps, args)
+    pruner_algorithm = PMGP_Algorithm.from_args(train_size, max_train_steps, args)
 
     # initialize the trainer
     trainer = Trainer(
