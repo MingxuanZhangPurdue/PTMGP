@@ -3,7 +3,6 @@ import re
 import numpy as np
 from composer.core import Algorithm, Event
 
-
 class PMGP_Algorithm(Algorithm):
     def __init__(self, 
                  train_size, max_train_steps,
@@ -157,9 +156,19 @@ class PMGP_Algorithm(Algorithm):
             ratio = final_ratio + (initial_ratio - final_ratio) * (mul_coeff ** 3)
             mask_ind = True if train_step_index % deltaT == 0 else False
         return ratio, mask_ind
+    
+    @torch.no_grad()
+    def calculate_sparsity(self, model):
+        n_params = 0
+        n_masked_params = 0
+        for n, p in model.named_parameters():
+            if self.whether_mask_para(n):
+                n_params += p.numel()
+                n_masked_params += p.data.eq(0.0).sum().item()
+        return n_masked_params/n_params
 
     def match(self, event, state):
-        return event in [Event.AFTER_TRAIN_BATCH,  Event.BATCH_END]
+        return event in [Event.AFTER_TRAIN_BATCH,  Event.BATCH_END, Event.FIT_END]
 
     def apply(self, event, state, logger):
         if event == Event.AFTER_TRAIN_BATCH:
@@ -172,3 +181,6 @@ class PMGP_Algorithm(Algorithm):
             if mask_threshold is None:
                 mask_threshold = 0.0
             logger.log_metrics({"mask_threshold": float(mask_threshold)})
+        elif event == Event.FIT_END:
+            final_sparsity = self.calculate_sparsity(state.model)
+            logger.log_metrics({"final sparsity": float(final_sparsity)})
