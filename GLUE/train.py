@@ -152,8 +152,8 @@ def parse_args():
     parser.add_argument("--anneal_end", type=int, default=5000, help="The number of traing batches/steps for annealing to end.")
 
     # PLATON
-    parser.add_argument("--beta1", type=float, default=0.85, help="The beta1 of Adam optimizer.")
-    parser.add_argument("--beta2", type=float, default=0.95, help="The beta2 of Adam optimizer.")
+    parser.add_argument("--beta1", type=float, default=0.85, help="The beta1 of PLATON pruner.")
+    parser.add_argument("--beta2", type=float, default=0.95, help="The beta2 of PLATON pruner.")
 
     # pruning algorithm
     parser.add_argument('--non_mask_name', 
@@ -299,7 +299,7 @@ def main():
         init_kwargs = {"config": vars(args)}
     )
 
-    # initialize the PMGP algorithm
+    # initialize the pruner algorithm
     train_size = len(train_dataset)
     train_time = Time.from_timestring(args.max_duration)
     if train_time.unit == TimeUnit.EPOCH:
@@ -308,7 +308,11 @@ def main():
         max_train_steps = train_time.value
     else:
         raise ValueError(f"Unsupported time unit: {train_time.unit}")
-    pruner_algorithm = PMGP_Algorithm.from_args(train_size, max_train_steps, args)
+    
+    if args.pruner == "PMGP":
+        pruner_algorithm = PMGP_Algorithm.from_args(train_size, max_train_steps, args)
+    elif args.pruner == "PLATON":
+        pruner_algorithm = PLATON_Algorithm.from_args(max_train_steps, args)
 
     # initialize the trainer
     trainer = Trainer(
