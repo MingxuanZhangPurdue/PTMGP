@@ -172,9 +172,7 @@ class PMGP_Algorithm(Algorithm):
 
     def apply(self, event, state, logger):
         if event == Event.AFTER_TRAIN_BATCH:
-            prior_threshold, anneal_lambda = self.add_prior_grad(state.model, state.timestamp.batch.value)
-            logger.log_metrics({"prior_threshold": float(prior_threshold)})
-            logger.log_metrics({"anneal_lambda": float(anneal_lambda)})
+            self.add_prior_grad(state.model, state.timestamp.batch.value)
         elif event == Event.BATCH_END:
             ratio, mask_threshold = self.magnitude_pruning(state.model, state.timestamp.batch.value)
             logger.log_metrics({"remaining_ratio": float(ratio)})
