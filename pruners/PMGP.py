@@ -10,11 +10,13 @@ class PMGP_Algorithm(Algorithm):
                  sigma0=1e-12, sigma1=0.1, lambda_mix=1e-7,
                  anneal_start = 0, anneal_end = 0,
                  initial_warmup = 0.0, final_warmup = 1, warmup_steps = 1000, deltaT = 1,
-                 non_mask_name=None):
+                 masking_value = 0.0, apply_prior_on_all_layers=False, non_mask_name=None):
         
         self.train_size = train_size
         self.max_train_steps = max_train_steps
         self.non_mask_name_pattern = re.compile("|".join(non_mask_name), re.IGNORECASE) if non_mask_name is not None else None
+        self.masking_value = masking_value
+        self.apply_prior_on_all_layers = apply_prior_on_all_layers
 
         self.lambda_mix = lambda_mix
         self.sigma0 = sigma0
@@ -54,7 +56,9 @@ class PMGP_Algorithm(Algorithm):
                     anneal_start=args.anneal_start, anneal_end=args.anneal_end,
                     initial_warmup=args.initial_warmup, final_warmup=args.final_warmup,
                     warmup_steps=args.warmup_steps, deltaT=args.deltaT,
-                    non_mask_name=args.non_mask_name
+                    masking_value=args.masking_value, 
+                    apply_prior_on_all_layers=args.apply_prior_on_all_layers, 
+                    non_mask_name=args.non_mask_name,
                     )
 
     def whether_mask_para(self, n):
@@ -97,7 +101,7 @@ class PMGP_Algorithm(Algorithm):
         if anneal_lambda > 0:
             with torch.no_grad():
                 for n, p in model.named_parameters():
-                    if self.whether_mask_para(n):
+                    if self.apply_prior_on_all_layers or self.whether_mask_para(n):
                         temp = p.pow(2).mul(c2).add(c1).exp().add(1).pow(-1)
                         temp = p.div(-sigma_0).mul(temp) + p.div(-sigma_1).mul(1 - temp)
                         prior_grad = temp.div(self.train_size)
@@ -119,7 +123,7 @@ class PMGP_Algorithm(Algorithm):
         # Mask weights whose importance lower than threshold
         for n, p in model.named_parameters():
             if self.whether_mask_para(n):
-                p.data.masked_fill_(is_dict[n] < mask_threshold, 0.0)
+                p.data.masked_fill_(is_dict[n] < mask_threshold, self.masking_value)
                 
         return mask_threshold
    

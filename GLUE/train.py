@@ -93,17 +93,40 @@ def parse_args():
     )
 
     # checkpointing
-    parser.add_argument("--run_name", type=str, default=None, help="Name of the run.")
-    parser.add_argument("--save_folder", type=str, default=None, help="Folder to save the checkpoints.")
-    parser.add_argument("--save_interval", type=str, default="1ep", help="Interval to save the checkpoints.")
-    parser.add_argument("--autoresume", action="store_true", help="If passed, will resume the latest checkpoint if any.")
-    parser.add_argument("--save_overwrite", action="store_true", help="If passed, will overwrite the checkpoints if any.")
-    parser.add_argument("--save_latest_filename", type=str, default='latest-rank{rank}.pt', help="Filename to save the last checkpoint.")
-    parser.add_argument("--save_filename", type=str, default='ep{epoch}-ba{batch}-rank{rank}.pt', help="Filename to save the checkpoints.")
+    parser.add_argument("--run_name", 
+                        type=str, 
+                        default=None, 
+                        help="Name of the run.")
+    parser.add_argument("--save_folder", 
+                        type=str, default=None, 
+                        help="Folder to save the checkpoints.")
+    parser.add_argument("--save_interval", 
+                        type=str, 
+                        default="1ep", 
+                        help="Interval to save the checkpoints.")
+    parser.add_argument("--autoresume", 
+                        action="store_true", 
+                        help="If passed, will resume the latest checkpoint if any.")
+    parser.add_argument("--save_overwrite", 
+                        action="store_true", 
+                        help="If passed, will overwrite the checkpoints if any.")
+    parser.add_argument("--save_latest_filename", 
+                        type=str, 
+                        default='latest-rank{rank}.pt', 
+                        help="Filename to save the last checkpoint.")
+    parser.add_argument("--save_filename", 
+                        type=str, 
+                        default='ep{epoch}-ba{batch}-rank{rank}.pt', help="Filename to save the checkpoints.")
 
     # evaluation
-    parser.add_argument("--eval_interval", type=str, default="1ep", help="Interval to evaluate the model.")
-    parser.add_argument("--per_device_eval_batch_size", type=int, default=8, help="Batch size (per device) for the evaluation dataloader.")
+    parser.add_argument("--eval_interval", 
+                        type=str, 
+                        default="1ep", 
+                        help="Interval to evaluate the model.")
+    parser.add_argument("--per_device_eval_batch_size", 
+                        type=int, 
+                        default=8, 
+                        help="Batch size (per device) for the evaluation dataloader.")
 
     # training setups
     parser.add_argument(
@@ -125,9 +148,9 @@ def parse_args():
         default=5e-5,
         help="Initial learning rate (after the potential warmup period) to use.",
     )
-    parser.add_argument("--weight_decay", type=float, default=0.0, help="Weight decay to use.")
-    parser.add_argument("--max_duration", type=str, default="1ep", help="Total number of training epochs/batches/steps to perform.")
-    parser.add_argument("--t_warmup", type=str, default="1ba", help="Number of steps for the warmup in the lr scheduler.")
+    parser.add_argument("--weight_decay", type=float, default=0.0,  help="Weight decay to use.")
+    parser.add_argument("--max_duration", type=str,  default="1ep", help="Total number of training epochs/batches/steps to perform.")
+    parser.add_argument("--t_warmup",     type=str,  default="1ba", help="Number of steps for the warmup in the lr scheduler.")
 
     # wandb logging
     parser.add_argument("--wandb_project", type=str, default=None, help="The wandb project to log to.")
@@ -137,19 +160,25 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=42, help="Random seed to use for reproducibility.")
 
     # cubic pruning scheduler
-    parser.add_argument("--final_ratio", type=float, default=0.1, help="The final ratio of the remaining weights.")
-    parser.add_argument("--initial_ratio", type=float, default=1, help="The initial ratio of the remaining weights.")
-    parser.add_argument("--initial_warmup", type=int, default=1, help="The number of training batches/steps for initial warmup.")
-    parser.add_argument("--final_warmup", type=int, default=1, help="The number of training batches/steps for final warmup.")
-    parser.add_argument("--warmup_steps", type=int, default=100, help="The number of warmup steps.")
-    parser.add_argument("--deltaT", type=int, default=10, help="The interval to mask weights.")
+    parser.add_argument("--final_ratio",    type=float, default=0.1, help="The final ratio of the remaining weights.")
+    parser.add_argument("--initial_ratio",  type=float, default=1,   help="The initial ratio of the remaining weights.")
+    parser.add_argument("--initial_warmup", type=int,   default=1,   help="The number of training batches/steps for initial warmup.")
+    parser.add_argument("--final_warmup",   type=int,   default=1,   help="The number of training batches/steps for final warmup.")
+    parser.add_argument("--warmup_steps",   type=int,   default=100, help="The number of warmup steps.")
+    parser.add_argument("--deltaT",         type=int,   default=10,  help="The interval to mask weights.")
 
     # PMGP
-    parser.add_argument("--sigma0", type=float, default=1e-12, help="The smaller variance of the Mixture Gaussian prior.")
-    parser.add_argument("--sigma1", type=float, default=0.05, help="The larger variance of the Mixture Gaussian orior.")
-    parser.add_argument("--lambda_mix", type=float, default=1e-7, help="The mixing coefficient of the Mixture Gaussian prior.")
-    parser.add_argument("--anneal_start", type=int, default=0, help="The number of traing batches/steps for annealing to start.")
-    parser.add_argument("--anneal_end", type=int, default=5000, help="The number of traing batches/steps for annealing to end.")
+    parser.add_argument("--sigma0",          type=float, default=1e-12, help="The smaller variance of the Mixture Gaussian prior.")
+    parser.add_argument("--sigma1",          type=float, default=0.05,  help="The larger variance of the Mixture Gaussian orior.")
+    parser.add_argument("--lambda_mix",      type=float, default=1e-7,  help="The mixing coefficient of the Mixture Gaussian prior.")
+    parser.add_argument("--anneal_start",    type=int,   default=0,     help="The number of traing batches/steps for annealing to start.")
+    parser.add_argument("--anneal_end",      type=int,   default=5000,  help="The number of traing batches/steps for annealing to end.")
+    parser.add_argument("--masking_value",   type=float, default=0.0,   help="The masking value for the pruned weights.")
+    parser.add_argument(
+        "--apply_prior_on_all_layers",
+        action="store_true",
+        help="If passed, will apply the prior on all layers.",
+    )
 
     # PLATON
     parser.add_argument("--beta1", type=float, default=0.85, help="The beta1 of PLATON pruner.")
