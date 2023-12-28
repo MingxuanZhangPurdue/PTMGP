@@ -26,6 +26,8 @@ from composer import Trainer
 from composer.callbacks import LRMonitor, RuntimeEstimator
 from composer.loggers import WandBLogger
 from pruners.PMGP import PMGP_Algorithm
+from pruners.PLATON import PLATON_Algorithm
+
 
 
 task_to_keys = {
@@ -134,22 +136,36 @@ def parse_args():
     # reproducibility
     parser.add_argument("--seed", type=int, default=42, help="Random seed to use for reproducibility.")
 
-    # PMGP
+    # cubic pruning scheduler
     parser.add_argument("--final_ratio", type=float, default=0.1, help="The final ratio of the remaining weights.")
     parser.add_argument("--initial_ratio", type=float, default=1, help="The initial ratio of the remaining weights.")
+    parser.add_argument("--initial_warmup", type=int, default=1, help="The number of training batches/steps for initial warmup.")
+    parser.add_argument("--final_warmup", type=int, default=1, help="The number of training batches/steps for final warmup.")
+    parser.add_argument("--warmup_steps", type=int, default=100, help="The number of warmup steps.")
+    parser.add_argument("--deltaT", type=int, default=10, help="The interval to mask weights.")
 
+    # PMGP
     parser.add_argument("--sigma0", type=float, default=1e-12, help="The smaller variance of the Mixture Gaussian prior.")
     parser.add_argument("--sigma1", type=float, default=0.05, help="The larger variance of the Mixture Gaussian orior.")
     parser.add_argument("--lambda_mix", type=float, default=1e-7, help="The mixing coefficient of the Mixture Gaussian prior.")
     parser.add_argument("--anneal_start", type=int, default=0, help="The number of traing batches/steps for annealing to start.")
     parser.add_argument("--anneal_end", type=int, default=5000, help="The number of traing batches/steps for annealing to end.")
 
-    parser.add_argument("--initial_warmup", type=int, default=1, help="The number of training batches/steps for initial warmup.")
-    parser.add_argument("--final_warmup", type=int, default=1, help="The number of training batches/steps for final warmup.")
-    parser.add_argument("--warmup_steps", type=int, default=100, help="The number of warmup steps.")
-    parser.add_argument("--deltaT", type=int, default=10, help="The interval to mask weights.")
+    # PLATON
+    parser.add_argument("--beta1", type=float, default=0.85, help="The beta1 of Adam optimizer.")
+    parser.add_argument("--beta2", type=float, default=0.95, help="The beta2 of Adam optimizer.")
 
-    parser.add_argument('--non_mask_name', nargs='+', type=str, default=["layernorm", "classifier", "pooler"])
+    # pruning algorithm
+    parser.add_argument('--non_mask_name', 
+                        nargs='+', 
+                        type=str, 
+                        default=["layernorm", "classifier", "pooler"], 
+                        help="The names of the modules that should not be pruned.")
+    parser.add_argument("--pruner", 
+                        type=str, 
+                        default="PMGP", 
+                        help="The pruner to use.", 
+                        choices=["PMGP", "PLATON"])
 
     args = parser.parse_args()
     return args

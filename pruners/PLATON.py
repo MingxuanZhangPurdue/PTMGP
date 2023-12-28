@@ -140,3 +140,30 @@ class PLATON_Algorithm(Algorithm):
             mask_threshold = None
         
         return ratio, mask_threshold
+    
+    @torch.no_grad()
+    def calculate_sparsity(self, model):
+        n_params = 0
+        n_masked_params = 0
+        for n, p in model.named_parameters():
+            if self.whether_mask_para(n):
+                n_params += p.numel()
+                n_masked_params += p.data.eq(0.0).sum().item()
+        return n_masked_params/n_params
+
+    
+    def match(self, event, state):
+
+        return event in [Event.BATCH_END, Event.FIT_END]
+
+    def apply(self, event, state, logger):
+        
+        if event == Event.BATCH_END:
+            ratio, mask_threshold = self.update_and_pruning(state.model, state.timestamp.batch.value)
+            logger.log_metrics({"remaining_ratio": float(ratio)})
+            if mask_threshold is None:
+                mask_threshold = 0.0
+            logger.log_metrics({"mask_threshold": float(mask_threshold)})
+        elif event == Event.FIT_END:
+            final_sparsity = self.calculate_sparsity(state.model)
+            logger.log_metrics({"final_sparsity": float(final_sparsity)})
