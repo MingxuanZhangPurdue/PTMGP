@@ -61,7 +61,7 @@ class PMGP_Algorithm(Algorithm):
         if self.non_mask_name_pattern == None:
             return True
         else:
-            return bool(re.search(self.non_mask_name_pattern, n))
+            return not bool(re.search(self.non_mask_name_pattern, n))
 
     def calculate_prior_threshold(self):
 
