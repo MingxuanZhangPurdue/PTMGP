@@ -149,8 +149,32 @@ def parse_args():
         help="Initial learning rate (after the potential warmup period) to use.",
     )
     parser.add_argument("--weight_decay", type=float, default=0.0,  help="Weight decay to use.")
-    parser.add_argument("--max_duration", type=str,  default="1ep", help="Total number of training epochs/batches/steps to perform.")
-    parser.add_argument("--t_warmup",     type=str,  default="1ba", help="Number of steps for the warmup in the lr scheduler.")
+    parser.add_argument("--max_duration", type=str,   default="1ep", help="Total number of training epochs/batches/steps to perform.")
+
+    # lr scheduler
+    parser.add_argument(
+        "--scheduler_type",
+        type=str,
+        default="linear",
+        help="The type of the lr scheduler.",
+        choices=["linear", "multi_step"],
+    )
+    parser.add_argument(
+        "--t_warmup", 
+        type=str, 
+        default="0.1dur", 
+        help="Number of steps for the warmup in the lr scheduler.")
+    parser.add_argument(
+        "--milestones", 
+        nargs='+', 
+        type=str, 
+        default=["0.3dur", "0.5dur", "0.7dur"], 
+        help="Milestones for the multi-step lr scheduler.")
+    parser.add_argument(
+        "--gamma", 
+        type=float, 
+        default=0.5, 
+        help="Gamma for the multi-step lr scheduler.")
 
     # wandb logging
     parser.add_argument("--wandb_project", type=str, default=None, help="The wandb project to log to.")
@@ -164,7 +188,6 @@ def parse_args():
     parser.add_argument("--initial_ratio",  type=float, default=1,   help="The initial ratio of the remaining weights.")
     parser.add_argument("--initial_warmup", type=int,   default=1,   help="The number of training batches/steps for initial warmup.")
     parser.add_argument("--final_warmup",   type=int,   default=1,   help="The number of training batches/steps for final warmup.")
-    parser.add_argument("--warmup_steps",   type=int,   default=100, help="The number of warmup steps.")
     parser.add_argument("--deltaT",         type=int,   default=10,  help="The interval to mask weights.")
 
     # PMGP

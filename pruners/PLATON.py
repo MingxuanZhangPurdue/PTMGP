@@ -7,7 +7,7 @@ class PLATON_Algorithm(Algorithm):
                  max_train_steps, 
                  beta1=0.85, beta2=0.95,
                  initial_ratio=1, final_ratio=0.5,
-                 initial_warmup=1, final_warmup=1, warmup_steps=1, deltaT=1,
+                 initial_warmup=1, final_warmup=1, deltaT=1,
                  non_mask_name=None):
 
         self.ipt = {}
@@ -23,13 +23,12 @@ class PLATON_Algorithm(Algorithm):
         self.initial_ratio = initial_ratio
         self.initial_warmup = initial_warmup
         self.final_warmup = final_warmup
-        self.warmup_steps = warmup_steps
         self.deltaT = deltaT
 
         self.non_mask_name_pattern = re.compile("|".join(non_mask_name), re.IGNORECASE) if non_mask_name is not None else None
 
-        cubic_prune_start = initial_warmup*warmup_steps
-        cubic_prune_end = max_train_steps - final_warmup*warmup_steps
+        cubic_prune_start = initial_warmup
+        cubic_prune_end = max_train_steps - final_warmup
 
         self.cubic_prune_start = cubic_prune_start
         self.cubic_prune_end = cubic_prune_end
@@ -42,7 +41,7 @@ class PLATON_Algorithm(Algorithm):
                     beta1=args.beta1, beta2=args.beta2,
                     initial_ratio=args.initial_ratio, final_ratio=args.final_ratio,
                     initial_warmup=args.initial_warmup, final_warmup=args.final_warmup,
-                    warmup_steps=args.warmup_steps, deltaT=args.deltaT,
+                    deltaT=args.deltaT,
                     non_mask_name=args.non_mask_name
                     )
     

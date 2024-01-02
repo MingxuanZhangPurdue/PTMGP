@@ -9,7 +9,7 @@ class PMGP_Algorithm(Algorithm):
                  final_ratio=1, initial_ratio=1,
                  sigma0=1e-12, sigma1=0.1, lambda_mix=1e-7,
                  anneal_start = 0, anneal_end = 0,
-                 initial_warmup = 0.0, final_warmup = 1, warmup_steps = 1000, deltaT = 1,
+                 initial_warmup = 0.0, final_warmup = 1, deltaT = 1,
                  masking_value = 0.0, apply_prior_on_all_layers=False, non_mask_name=None):
         
         self.train_size = train_size
@@ -24,18 +24,17 @@ class PMGP_Algorithm(Algorithm):
 
         self.anneal_start = anneal_start
         self.anneal_end = anneal_end
-        self.prior_warmup_steps = anneal_end - anneal_start
+        self.prior_warmup = anneal_end - anneal_start
 
         self.final_ratio = final_ratio
         self.initial_ratio = initial_ratio
         
         self.initial_warmup = initial_warmup
         self.final_warmup = final_warmup
-        self.warmup_steps = warmup_steps
         self.deltaT = deltaT
         
-        cubic_prune_start = anneal_end + initial_warmup*warmup_steps
-        cubic_prune_end = max_train_steps - final_warmup*warmup_steps
+        cubic_prune_start = anneal_end + initial_warmup
+        cubic_prune_end = max_train_steps - final_warmup
         
         if not (anneal_end <= cubic_prune_start <= cubic_prune_end <= max_train_steps):
             print ("anneal_end:", anneal_end)
@@ -55,7 +54,7 @@ class PMGP_Algorithm(Algorithm):
                     sigma0=args.sigma0, sigma1=args.sigma1, lambda_mix=args.lambda_mix,
                     anneal_start=args.anneal_start, anneal_end=args.anneal_end,
                     initial_warmup=args.initial_warmup, final_warmup=args.final_warmup,
-                    warmup_steps=args.warmup_steps, deltaT=args.deltaT,
+                    deltaT=args.deltaT,
                     masking_value=args.masking_value, 
                     apply_prior_on_all_layers=args.apply_prior_on_all_layers, 
                     non_mask_name=args.non_mask_name,
@@ -85,12 +84,12 @@ class PMGP_Algorithm(Algorithm):
         
         anneal_start = self.anneal_start
         anneal_end = self.anneal_end
-        prior_warmup_steps = self.prior_warmup_steps
+        prior_warmup = self.prior_warmup
         
         if train_step_index < anneal_start:
             anneal_lambda = 0
         elif anneal_start <= train_step_index < anneal_end:
-            anneal_lambda = 1.0 * (train_step_index - anneal_start)/prior_warmup_steps
+            anneal_lambda = 1.0 * (train_step_index - anneal_start)/prior_warmup
         else:
             anneal_lambda = 1.0
                 
