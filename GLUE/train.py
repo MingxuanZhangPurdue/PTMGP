@@ -200,7 +200,7 @@ def parse_args():
     parser.add_argument('--non_prior_name', 
                         nargs='+', 
                         type=str, 
-                        default=["layernorm", "bias", "classifier", "pooler"],
+                        default=["layernorm", "bias", "classifier", "pooler", "embedding"],
                         help="The names of the modules that should not be penalized by the prior.")
 
     # PLATON
@@ -211,7 +211,7 @@ def parse_args():
     parser.add_argument('--non_mask_name', 
                         nargs='+', 
                         type=str, 
-                        default=["layernorm", "classifier", "pooler", "embedding"], 
+                        default=["layernorm", "classifier", "pooler", "embedding"],
                         help="The names of the modules that should not be pruned.")
     parser.add_argument("--pruner", 
                         type=str, 
