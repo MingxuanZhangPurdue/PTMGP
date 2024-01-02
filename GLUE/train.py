@@ -197,11 +197,11 @@ def parse_args():
     parser.add_argument("--anneal_start",    type=int,   default=0,     help="The number of traing batches/steps for annealing to start.")
     parser.add_argument("--anneal_end",      type=int,   default=5000,  help="The number of traing batches/steps for annealing to end.")
     parser.add_argument("--masking_value",   type=float, default=0.0,   help="The masking value for the pruned weights.")
-    parser.add_argument(
-        "--apply_prior_on_all_layers",
-        action="store_true",
-        help="If passed, will apply the prior on all layers.",
-    )
+    parser.add_argument('--non_prior_name', 
+                        nargs='+', 
+                        type=str, 
+                        default=["layernorm", "bias", "classifier", "pooler"],
+                        help="The names of the modules that should not be penalized by the prior.")
 
     # PLATON
     parser.add_argument("--beta1", type=float, default=0.85, help="The beta1 of PLATON pruner.")
