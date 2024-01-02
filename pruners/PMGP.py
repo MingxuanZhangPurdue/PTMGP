@@ -72,7 +72,6 @@ class PMGP_Algorithm(Algorithm):
         else:
             return not bool(re.search(self.non_prior_name_pattern, n))
 
-
     def calculate_prior_threshold(self):
 
         lambda_mix = self.lambda_mix
