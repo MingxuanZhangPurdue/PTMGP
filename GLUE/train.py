@@ -343,7 +343,7 @@ def main():
     # optimizer and lr_scheduler creation
     optimizer = torch.optim.AdamW(composer_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     if args.scheduler_type == "multi_step":
-        lr_scheduler = composer.optim.MultiStepWithWarmupScheduler(milestones=args.milestones, t_warmup=args.t_warmup, gamma=args.gamma, t_max=args.max_duration)
+        lr_scheduler = composer.optim.MultiStepWithWarmupScheduler(milestones=args.milestones, t_warmup=args.t_warmup, gamma=args.gamma)
     elif args.scheduler_type == "linear":
         lr_scheduler = composer.optim.LinearWithWarmupScheduler(t_warmup=args.t_warmup, t_max=args.max_duration)
     else:
