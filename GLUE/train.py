@@ -175,6 +175,12 @@ def parse_args():
         type=float, 
         default=0.5, 
         help="Gamma for the multi-step lr scheduler.")
+    parser.add_argument(
+        "--alpha_f",
+        type=float, 
+        default=0.0, 
+        help="Final learning rate multiplier for the linear lr scheduler.")
+
 
     # wandb logging
     parser.add_argument("--wandb_project", type=str, default=None, help="The wandb project to log to.")
@@ -345,7 +351,7 @@ def main():
     if args.scheduler_type == "multi_step":
         lr_scheduler = composer.optim.MultiStepWithWarmupScheduler(milestones=args.milestones, t_warmup=args.t_warmup, gamma=args.gamma)
     elif args.scheduler_type == "linear":
-        lr_scheduler = composer.optim.LinearWithWarmupScheduler(t_warmup=args.t_warmup, t_max=args.max_duration)
+        lr_scheduler = composer.optim.LinearWithWarmupScheduler(t_warmup=args.t_warmup, alpha_f=args.alpha_f)
     else:
         raise ValueError(f"Unsupported scheduler type: {args.scheduler_type}")
 
