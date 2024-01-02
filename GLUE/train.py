@@ -342,7 +342,12 @@ def main():
 
     # optimizer and lr_scheduler creation
     optimizer = torch.optim.AdamW(composer_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-    lr_scheduler = composer.optim.LinearWithWarmupScheduler(t_warmup=args.t_warmup, t_max=args.max_duration)
+    if args.scheduler_type == "multi_step":
+        lr_scheduler = composer.optim.MultiStepWithWarmupScheduler(milestones=args.milestones, t_warmup=args.t_warmup, gamma=args.gamma, t_max=args.max_duration)
+    elif args.scheduler_type == "linear":
+        lr_scheduler = composer.optim.LinearWithWarmupScheduler(t_warmup=args.t_warmup, t_max=args.max_duration)
+    else:
+        raise ValueError(f"Unsupported scheduler type: {args.scheduler_type}")
 
     # initialize the wandb logger
     wandb_logger = WandBLogger(
