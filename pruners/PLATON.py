@@ -75,7 +75,7 @@ class PLATON_Algorithm(Algorithm):
         return ratio, mask_ind
 
 
-    def update_ipt_with_local_window(self, model, global_step):
+    def update_ipt_with_local_window(self, model, train_step_index):
 
         # Calculate the sensitivity and uncertainty 
         for n,p in model.named_parameters():
@@ -86,8 +86,8 @@ class PLATON_Algorithm(Algorithm):
                     if self.beta2>0 and self.beta2!=1:
                         self.exp_avg_unc[n] = torch.zeros_like(p)
                 
-                local_step = global_step % self.deltaT
-                update_step = global_step // self.deltaT
+                local_step = train_step_index % self.deltaT
+                update_step = train_step_index // self.deltaT
                 if local_step == 0: 
                     self.exp_avg_ipt[n] = self.beta1 * self.exp_avg_ipt[n] + (1 - self.beta1) * self.ipt[n]
                     if self.beta2 > 0 and self.beta2 < 1:
