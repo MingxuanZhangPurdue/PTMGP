@@ -353,7 +353,7 @@ def main():
     elif args.scheduler_type == "linear":
         lr_scheduler = composer.optim.LinearWithWarmupScheduler(t_warmup=args.t_warmup, alpha_f=args.alpha_f)
     else:
-        raise ValueError(f"Unsupported scheduler type: {args.scheduler_type}")
+        raise ValueError(f"Unsupported scheduler type: {args.scheduler_type}, only support multi_step and linear.")
 
     # initialize the wandb logger
     wandb_logger = WandBLogger(
