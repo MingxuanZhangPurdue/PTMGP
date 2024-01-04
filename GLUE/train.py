@@ -153,34 +153,15 @@ def parse_args():
 
     # lr scheduler
     parser.add_argument(
-        "--scheduler_type",
-        type=str,
-        default="linear",
-        help="The type of the lr scheduler.",
-        choices=["linear", "multi_step"],
-    )
-    parser.add_argument(
         "--t_warmup", 
         type=str, 
-        default="0.1dur", 
+        default="0.05dur", 
         help="Number of steps for the warmup in the lr scheduler.")
-    parser.add_argument(
-        "--milestones", 
-        nargs='+', 
-        type=str, 
-        default=["0.3dur", "0.5dur", "0.7dur"], 
-        help="Milestones for the multi-step lr scheduler.")
-    parser.add_argument(
-        "--gamma", 
-        type=float, 
-        default=0.5, 
-        help="Gamma for the multi-step lr scheduler.")
     parser.add_argument(
         "--alpha_f",
         type=float, 
         default=0.0, 
         help="Final learning rate multiplier for the linear lr scheduler.")
-
 
     # wandb logging
     parser.add_argument("--wandb_project", type=str, default=None, help="The wandb project to log to.")
@@ -206,7 +187,7 @@ def parse_args():
     parser.add_argument('--non_prior_name', 
                         nargs='+', 
                         type=str, 
-                        default=["layernorm", "bias", "classifier", "pooler", "embedding"],
+                        default=["layernorm", "classifier", "pooler", "embedding"],
                         help="The names of the modules that should not be penalized by the prior.")
 
     # PLATON
@@ -346,14 +327,9 @@ def main():
             metric_names=['MulticlassAccuracy']
         )
 
-    # optimizer and lr_scheduler creation
+    # optimizer and learning rate scheduler creation
     optimizer = torch.optim.AdamW(composer_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-    if args.scheduler_type == "multi_step":
-        lr_scheduler = composer.optim.MultiStepWithWarmupScheduler(milestones=args.milestones, t_warmup=args.t_warmup, gamma=args.gamma)
-    elif args.scheduler_type == "linear":
-        lr_scheduler = composer.optim.LinearWithWarmupScheduler(t_warmup=args.t_warmup, alpha_f=args.alpha_f)
-    else:
-        raise ValueError(f"Unsupported scheduler type: {args.scheduler_type}, only support multi_step and linear.")
+    lr_scheduler = composer.optim.LinearWithWarmupScheduler(t_warmup=args.t_warmup, alpha_f=args.alpha_f)
 
     # initialize the wandb logger
     wandb_logger = WandBLogger(
