@@ -16,6 +16,7 @@ from transformers import (
 )
 
 import composer
+from composer.utils import reproducibility
 from composer.core import Evaluator
 from composer import Time, TimeUnit
 from composer.utils import dist
@@ -214,6 +215,10 @@ def main():
 
     # parse the arguments
     args = parse_args()
+
+    # reproducibility
+    reproducibility.configure_deterministic_mode()
+    reproducibility.seed_all(args.seed)
 
     # load the raw datasets
     raw_datasets = load_dataset(
