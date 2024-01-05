@@ -7,7 +7,7 @@ class PMGP_Algorithm(Algorithm):
     def __init__(self, 
                  train_size, max_train_steps,
                  final_ratio=1, initial_ratio=1,
-                 sigma0=1e-12, sigma1=0.1, lambda_mix=1e-7,
+                 sigma0=1e-15, sigma1=0.1, lambda_mix=1e-7,
                  anneal_start = 0, anneal_end = 0,
                  initial_warmup = 0.0, final_warmup = 1, deltaT = 1,
                  masking_value = 0.0, non_mask_name=None, non_prior_name=None):
