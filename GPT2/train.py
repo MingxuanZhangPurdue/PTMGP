@@ -239,7 +239,6 @@ def main():
     args = parse_args()
 
     # reproducibility
-    reproducibility.configure_deterministic_mode()
     reproducibility.seed_all(args.seed)
 
     # load the raw datasets
