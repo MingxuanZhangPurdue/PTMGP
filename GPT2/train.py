@@ -456,11 +456,11 @@ def main():
     )
 
     # initialize the wandb logger
-    #wandb_logger = WandBLogger(
-    #    project=args.wandb_project,
-    #    name=args.wandb_name,
-    #    init_kwargs = {"config": vars(args)}
-    #)
+    wandb_logger = WandBLogger(
+        project=args.wandb_project,
+        name=args.wandb_name,
+        init_kwargs = {"config": vars(args)}
+    )
 
     # initialize the pruner algorithm
     train_size = len(train_dataset)
@@ -494,13 +494,13 @@ def main():
         eval_interval=args.eval_interval,
 
         # logging
-        #loggers=[wandb_logger],
+        loggers=[wandb_logger],
 
         # callbacks
         callbacks=[LRMonitor(), RuntimeEstimator()],
 
         # algorithms
-        algorithms=[pruner_algorithm],
+        #algorithms=[pruner_algorithm],
 
         # checkpointing
         run_name=args.run_name,
@@ -514,6 +514,9 @@ def main():
         # reproducibility
         seed=args.seed,
     )
+
+    # Train
+    trainer.fit()
 
 
 
