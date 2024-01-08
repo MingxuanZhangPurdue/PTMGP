@@ -50,6 +50,16 @@ def parse_args():
 
     # dataset, model, and tokenizer
     parser.add_argument(
+        "--trust_remote_code",
+        type=bool,
+        default=False,
+        help=(
+            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+            "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
+            "execute code present on the Hub on your local machine."
+        ),
+    )
+    parser.add_argument(
         "--preprocessing_num_workers",
         type=int,
         default=None,
@@ -254,11 +264,13 @@ def main():
     config = AutoConfig.from_pretrained(
         args.model_name_or_path,
         cache_dir=args.cache_dir,
+        trust_remote_code=args.trust_remote_code,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_name_or_path,
         cache_dir=args.cache_dir,
         use_fast=not args.use_slow_tokenizer,
+        trust_remote_code=args.trust_remote_code,
     )
     torch_dtype = (
         args.torch_dtype
@@ -270,6 +282,7 @@ def main():
         config=config,
         cache_dir=args.cache_dir,
         torch_dtype=torch_dtype,
+        trust_remote_code=args.trust_remote_code,
     )
 
     # resize the model if necessary
