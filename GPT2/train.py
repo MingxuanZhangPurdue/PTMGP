@@ -4,6 +4,7 @@ import torch
 from itertools import chain
 from datasets import load_dataset
 from torch.utils.data import DataLoader
+from torch.distributed import barrier
 from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
@@ -14,7 +15,7 @@ from transformers import (
 
 from composer.utils import reproducibility
 from composer import Time, TimeUnit
-from composer.utils import dist
+from composer.utils.dist import get_sampler, get_local_rank
 from composer.models.huggingface import HuggingFaceModel
 from composer.metrics.nlp import LanguageCrossEntropy, LanguagePerplexity
 from composer import Trainer
@@ -329,6 +330,11 @@ def main():
     def tokenize_function(examples):
         return tokenizer(examples[text_column_name])
     
+
+    if get_local_rank() > 0:
+        print ("Waiting for main process to perform the mapping")
+        barrier()
+
     tokenized_datasets = raw_datasets.map(
         tokenize_function,
         batched=True,
@@ -337,6 +343,10 @@ def main():
         load_from_cache_file=not args.overwrite_cache,
         desc="Running tokenizer on dataset",
     )
+
+    if get_local_rank() == 0:
+        print("Loading results from main process")
+        barrier()
 
     if hasattr(config, "max_position_embeddings"):
         max_pos_embeddings = config.max_position_embeddings
@@ -389,6 +399,10 @@ def main():
     # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
     # https://huggingface.co/docs/datasets/process#map
 
+    if get_local_rank() > 0:
+        print ("Waiting for main process to perform the mapping")
+        barrier()
+
     lm_datasets = tokenized_datasets.map(
         group_texts,
         batched=True,
@@ -396,6 +410,10 @@ def main():
         load_from_cache_file=not args.overwrite_cache,
         desc=f"Grouping texts in chunks of {max_length}",
     )
+
+    if get_local_rank() == 0:
+        print("Loading results from main process")
+        barrier()
 
     train_dataset = lm_datasets["train"]
     if args.max_train_samples is not None:
@@ -407,8 +425,8 @@ def main():
         max_eval_samples = min(len(eval_dataset), args.max_eval_samples)
         eval_dataset = eval_dataset.select(range(max_eval_samples))
 
-    train_sampler = dist.get_sampler(train_dataset, shuffle=True)
-    eval_sampler = dist.get_sampler(eval_dataset, shuffle=False)
+    train_sampler = get_sampler(train_dataset, shuffle=True)
+    eval_sampler = get_sampler(eval_dataset, shuffle=False)
 
 
     train_dataloader = DataLoader(
