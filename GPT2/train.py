@@ -331,9 +331,9 @@ def main():
         return tokenizer(examples[text_column_name])
     
 
-    if get_local_rank() > 0:
-        print ("Waiting for main process to perform the mapping")
-        barrier()
+    #if get_local_rank() > 0:
+    #    print ("Waiting for main process to perform the mapping")
+    #    barrier()
 
     tokenized_datasets = raw_datasets.map(
         tokenize_function,
@@ -344,9 +344,9 @@ def main():
         desc="Running tokenizer on dataset",
     )
 
-    if get_local_rank() == 0:
-        print("Loading results from main process")
-        barrier()
+    #if get_local_rank() == 0:
+    #    print("Loading results from main process")
+    #    barrier()
 
     if hasattr(config, "max_position_embeddings"):
         max_pos_embeddings = config.max_position_embeddings
@@ -399,9 +399,9 @@ def main():
     # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
     # https://huggingface.co/docs/datasets/process#map
 
-    if get_local_rank() > 0:
-        print ("Waiting for main process to perform the mapping")
-        barrier()
+    #if get_local_rank() > 0:
+    #    print ("Waiting for main process to perform the mapping")
+    #    barrier()
 
     lm_datasets = tokenized_datasets.map(
         group_texts,
@@ -411,9 +411,9 @@ def main():
         desc=f"Grouping texts in chunks of {max_length}",
     )
 
-    if get_local_rank() == 0:
-        print("Loading results from main process")
-        barrier()
+    #if get_local_rank() == 0:
+    #    print("Loading results from main process")
+    #    barrier()
 
     train_dataset = lm_datasets["train"]
     if args.max_train_samples is not None:
