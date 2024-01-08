@@ -24,6 +24,7 @@ from composer.models.huggingface import HuggingFaceModel
 from torchmetrics.classification import MulticlassAccuracy, MulticlassMatthewsCorrCoef, MulticlassF1Score
 from torchmetrics.regression import SpearmanCorrCoef, PearsonCorrCoef
 from composer import Trainer
+from composer.metrics import BinaryF1Score
 from composer.callbacks import LRMonitor, RuntimeEstimator
 from composer.loggers import WandBLogger
 from pruners.PMGP import PMGP_Algorithm

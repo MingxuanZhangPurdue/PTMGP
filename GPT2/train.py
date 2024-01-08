@@ -1,39 +1,32 @@
 import argparse
-from dataclasses import dataclass, field
-from typing import Optional
-
-import numpy as np
+import warnings
+import torch
+from itertools import chain
 from datasets import load_dataset
 from torch.utils.data import DataLoader
-
-import torch
 from transformers import (
-    CONFIG_MAPPING,
-    MODEL_FOR_CAUSAL_LM_MAPPING,
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
-    DataCollatorWithPadding,
     default_data_collator,
 )
 
-import composer
+
 from composer.utils import reproducibility
-from composer.core import Evaluator
 from composer import Time, TimeUnit
 from composer.utils import dist
 from composer.models.huggingface import HuggingFaceModel
-from torchmetrics.classification import MulticlassAccuracy, MulticlassMatthewsCorrCoef, MulticlassF1Score
-from torchmetrics.regression import SpearmanCorrCoef, PearsonCorrCoef
+from composer.metrics.nlp import LanguageCrossEntropy, LanguagePerplexity
 from composer import Trainer
 from composer.callbacks import LRMonitor, RuntimeEstimator
 from composer.loggers import WandBLogger
+from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler
 from pruners.PMGP import PMGP_Algorithm
 from pruners.PLATON import PLATON_Algorithm
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Finetune and prune a transformers model on a glue task.")
+    parser = argparse.ArgumentParser(description="Prune a GPT2 model with openwebtext dataset.")
     
     # required arguments
     parser.add_argument(
@@ -57,6 +50,12 @@ def parse_args():
 
     # dataset, model, and tokenizer
     parser.add_argument(
+        "--preprocessing_num_workers",
+        type=int,
+        default=None,
+        help="The number of processes to use for the preprocessing.",
+    )
+    parser.add_argument(
         "--torch_dtype",
         type=str,
         default=None,
@@ -71,16 +70,9 @@ def parse_args():
         help="For debugging purposes or quicker training, truncate the number of training examples to this value if set.",
     )
     parser.add_argument(
-        "--max_eval_samples",
-        type=int,
-        default=None,
-        help="For debugging purposes or quicker training, truncate the number of evaluation examples to this value if set.",
-    )
-    parser.add_argument(
-        "--validation_split_percentage",
-        type=int,
-        default=0,
-        help="The percentage of the train set used as validation set in case there's no validation split provided.",
+        "--overwrite_cache",
+        action="store_true",
+        help="Overwrite the cached training and evaluation sets",
     )
     parser.add_argument(
         "--cache_dir",
@@ -89,28 +81,24 @@ def parse_args():
         help="Where to download pretrained models and datasets.",
     )
     parser.add_argument(
-        "--ignore_mismatched_sizes",
-        action="store_true",
-        help="Whether or not to enable to load a pretrained model whose head dimensions are different.",
-    )
-    parser.add_argument(
         "--use_slow_tokenizer",
         action="store_true",
         help="If passed, will use a slow tokenizer (not backed by the 🤗 Tokenizers library).",
     )
     parser.add_argument(
-        "--pad_to_max_length",
-        action="store_true",
-        help="If passed, pad all samples to `max_length`. Otherwise, dynamic padding is used.",
-    )
-    parser.add_argument(
         "--max_length",
         type=int,
-        default=128,
+        default=None,
         help=(
-            "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
-            " sequences shorter will be padded if `--pad_to_max_length` is passed."
+            "Optional input sequence length after tokenization. "
+            "The training dataset will be truncated in block of this size for training. "
+            "Default to the model max input length for single sentence inputs (take into account special tokens)."
         ),
+    )
+    parser.add_argument(
+    "--validation_split_percentage",
+    default=5,
+    help="The percentage of the train set used as validation set in case there's no validation split",
     )
 
     # checkpointing
@@ -138,7 +126,7 @@ def parse_args():
     parser.add_argument("--save_filename", 
                         type=str, 
                         default='ep{epoch}-ba{batch}-rank{rank}.pt', help="Filename to save the checkpoints.")
-
+    
     # evaluation
     parser.add_argument("--eval_interval", 
                         type=str, 
@@ -208,7 +196,7 @@ def parse_args():
     parser.add_argument('--non_prior_name', 
                         nargs='+', 
                         type=str, 
-                        default=["layernorm", "classifier", "pooler", "embedding"],
+                        default=["layernorm", "bias"],
                         help="The names of the modules that should not be penalized by the prior.")
 
     # PLATON
@@ -219,7 +207,7 @@ def parse_args():
     parser.add_argument('--non_mask_name', 
                         nargs='+', 
                         type=str, 
-                        default=["layernorm", "classifier", "pooler", "embedding"],
+                        default=["layernorm"],
                         help="The names of the modules that should not be pruned.")
     parser.add_argument("--pruner", 
                         type=str, 
@@ -248,6 +236,20 @@ def main():
         cache_dir=args.cache_dir,
     )
 
+    if "validation" not in raw_datasets.keys():
+        raw_datasets["validation"] = load_dataset(
+            args.dataset_name,
+            args.dataset_config_name,
+            split=f"train[:{args.validation_split_percentage}%]",
+            cache_dir=args.cache_dir,
+            )
+        raw_datasets["train"] = load_dataset(
+            args.dataset_name,
+            args.dataset_config_name,
+            split=f"train[{args.validation_split_percentage}%:]",
+            cache_dir=args.cache_dir,
+        )
+
     # load the model and tokenizer
     config = AutoConfig.from_pretrained(
         args.model_name_or_path,
@@ -268,6 +270,190 @@ def main():
         config=config,
         cache_dir=args.cache_dir,
         torch_dtype=torch_dtype,
+    )
+
+    # resize the model if necessary
+    embedding_size = model.get_input_embeddings().weight.shape[0]
+    if len(tokenizer) > embedding_size:
+        model.resize_token_embeddings(len(tokenizer))
+
+    # initialize the composer model
+    metrics = [LanguageCrossEntropy(), LanguagePerplexity()]
+    composer_model = HuggingFaceModel(model, tokenizer=tokenizer, metrics=metrics, use_logits=True)
+
+    # get the task name
+    column_names = list(raw_datasets["train"].features)
+    text_column_name = "text" if "text" in column_names else column_names[0]
+
+    def tokenize_function(examples):
+        return tokenizer(examples[text_column_name])
+    
+    tokenized_datasets = raw_datasets.map(
+        tokenize_function,
+        batched=True,
+        num_proc=args.preprocessing_num_workers,
+        remove_columns=column_names,
+        load_from_cache_file=not args.overwrite_cache,
+        desc="Running tokenizer on dataset",
+    )
+
+    if hasattr(config, "max_position_embeddings"):
+        max_pos_embeddings = config.max_position_embeddings
+    else:
+        # Define a default value if the attribute is missing in the config.
+        max_pos_embeddings = 1024
+
+
+    if args.max_length is None:
+        max_length = tokenizer.model_max_length
+        if max_length > max_pos_embeddings:
+            warnings.warn(
+                f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
+                f"Using max_length={min(1024, max_pos_embeddings)} instead. You can change that default value by passing --max_length xxx."
+            )
+            if max_pos_embeddings > 0:
+                max_length = min(1024, max_pos_embeddings)
+            else:
+                max_length = 1024
+    else:
+        if args.max_length > tokenizer.model_max_length:
+            warnings.warn(
+                f"The max_length passed ({args.max_length}) is larger than the maximum length for the model "
+                f"({tokenizer.model_max_length}). Using max_length={tokenizer.model_max_length}."
+            )
+        max_length = min(args.max_length, tokenizer.model_max_length)
+
+    
+    # Main data processing function that will concatenate all texts from our dataset and generate chunks of max_length.
+    def group_texts(examples):
+        # Concatenate all texts.
+        concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+        total_length = len(concatenated_examples[list(examples.keys())[0]])
+        # We drop the small remainder, and if the total_length < max_length we exclude this batch and return an empty dict.
+        # We could add padding if the model supported it instead of this drop, you can customize this part to your needs.
+        total_length = (total_length // max_length) * max_length
+        # Split by chunks of max_len.
+        result = {
+            k: [t[i : i + max_length] for i in range(0, total_length, max_length)]
+            for k, t in concatenated_examples.items()
+        }
+        result["labels"] = result["input_ids"].copy()
+        return result
+    
+
+    # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a remainder
+    # for each of those groups of 1,000 texts. You can adjust that batch_size here but a higher value might be slower
+    # to preprocess.
+    #
+    # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
+    # https://huggingface.co/docs/datasets/process#map
+
+    lm_datasets = tokenized_datasets.map(
+        group_texts,
+        batched=True,
+        num_proc=args.preprocessing_num_workers,
+        load_from_cache_file=not args.overwrite_cache,
+        desc=f"Grouping texts in chunks of {max_length}",
+    )
+
+    train_dataset = lm_datasets["train"]
+    if args.max_train_samples is not None:
+        max_train_samples = min(len(train_dataset), args.max_train_samples)
+        train_dataset = train_dataset.select(range(max_train_samples))
+
+    eval_dataset = lm_datasets["validation"]
+    if args.max_eval_samples is not None:
+        max_eval_samples = min(len(eval_dataset), args.max_eval_samples)
+        eval_dataset = eval_dataset.select(range(max_eval_samples))
+
+    train_sampler = dist.get_sampler(train_dataset, shuffle=True)
+    eval_sampler = dist.get_sampler(eval_dataset, shuffle=False)
+
+
+    train_dataloader = DataLoader(
+        train_dataset, 
+        collate_fn=default_data_collator, 
+        batch_size=args.per_device_train_batch_size, 
+        sampler=train_sampler
+    )
+    eval_dataloader = DataLoader(
+        eval_dataset, 
+        collate_fn=default_data_collator, 
+        batch_size=args.per_device_eval_batch_size, 
+        sampler=eval_sampler
+    )
+
+    # optimizer and learning rate scheduler creation
+    optimizer = DecoupledAdamW(
+        composer_model.parameters(), 
+        lr=args.learning_rate, 
+        betas=[0.9, 0.98], 
+        eps=1.0e-06, 
+        weight_decay=args.weight_decay
+    )
+    lr_scheduler = LinearWithWarmupScheduler(
+        t_warmup=args.t_warmup, 
+        alpha_f=args.alpha_f
+    )
+
+    # initialize the wandb logger
+    #wandb_logger = WandBLogger(
+    #    project=args.wandb_project,
+    #    name=args.wandb_name,
+    #    init_kwargs = {"config": vars(args)}
+    #)
+
+    # initialize the pruner algorithm
+    train_size = len(train_dataset)
+    train_time = Time.from_timestring(args.max_duration)
+    if train_time.unit == TimeUnit.EPOCH:
+        max_train_steps = len(train_dataloader) * train_time.value
+    elif train_time.unit == TimeUnit.BATCH:
+        max_train_steps = train_time.value
+    else:
+        raise ValueError(f"Unsupported time unit: {train_time.unit}")
+    
+    if args.pruner == "PMGP":
+        pruner_algorithm = PMGP_Algorithm.from_args(train_size, max_train_steps, args)
+    elif args.pruner == "PLATON":
+        pruner_algorithm = PLATON_Algorithm.from_args(max_train_steps, args)
+
+    # initialize the trainer
+    trainer = Trainer(
+        # training
+        model=composer_model,
+        train_dataloader=train_dataloader,
+        optimizers=optimizer,
+        max_duration=args.max_duration,
+        device_train_microbatch_size='auto',
+        device='gpu' if torch.cuda.is_available() else 'cpu',
+        precision=args.precision,
+        schedulers=lr_scheduler,
+
+        # evaluation
+        eval_dataloader=eval_dataloader,
+        eval_interval=args.eval_interval,
+
+        # logging
+        #loggers=[wandb_logger],
+
+        # callbacks
+        callbacks=[LRMonitor(), RuntimeEstimator()],
+
+        # algorithms
+        algorithms=[pruner_algorithm],
+
+        # checkpointing
+        run_name=args.run_name,
+        save_folder=args.save_folder,
+        save_filename=args.save_filename,
+        save_interval=args.save_interval,
+        save_latest_filename=args.save_latest_filename,
+        save_overwrite=args.save_overwrite,
+        autoresume=args.autoresume,
+
+        # reproducibility
+        seed=args.seed,
     )
 
 
