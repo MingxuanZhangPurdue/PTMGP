@@ -112,30 +112,44 @@ def parse_args():
     )
 
     # checkpointing
-    parser.add_argument("--run_name", 
-                        type=str, 
-                        default=None, 
-                        help="Name of the run.")
-    parser.add_argument("--save_folder", 
-                        type=str, default=None, 
-                        help="Folder to save the checkpoints.")
-    parser.add_argument("--save_interval", 
-                        type=str, 
-                        default="1ep", 
-                        help="Interval to save the checkpoints.")
-    parser.add_argument("--autoresume", 
-                        action="store_true", 
-                        help="If passed, will resume the latest checkpoint if any.")
-    parser.add_argument("--save_overwrite", 
-                        action="store_true", 
-                        help="If passed, will overwrite the checkpoints if any.")
-    parser.add_argument("--save_latest_filename", 
-                        type=str, 
-                        default='latest-rank{rank}.pt', 
-                        help="Filename to save the last checkpoint.")
-    parser.add_argument("--save_filename", 
-                        type=str, 
-                        default='ep{epoch}-ba{batch}-rank{rank}.pt', help="Filename to save the checkpoints.")
+    parser.add_argument(
+        "--run_name", 
+        type=str, 
+        default=None, 
+        help="Name of the run."
+    )
+    parser.add_argument(
+        "--save_folder", 
+        type=str, default=None, 
+        help="Folder to save the checkpoints."
+    )
+    parser.add_argument(
+        "--save_interval", 
+        type=str, 
+        default="1ep", 
+        help="Interval to save the checkpoints."
+    )
+    parser.add_argument(
+        "--autoresume", 
+        action="store_true", 
+        help="If passed, will resume the latest checkpoint if any."
+    )
+    parser.add_argument(
+        "--save_overwrite", 
+        action="store_true", 
+        help="If passed, will overwrite the checkpoints if any."
+    )
+    parser.add_argument(
+        "--save_latest_filename", 
+        type=str, 
+        default='latest-rank{rank}.pt', 
+        help="Filename to save the last checkpoint."
+    )
+    parser.add_argument(
+        "--save_filename", 
+        type=str, 
+        default='ep{epoch}-ba{batch}-rank{rank}.pt', help="Filename to save the checkpoints."
+    )
     
     # evaluation
     parser.add_argument(
@@ -144,14 +158,18 @@ def parse_args():
         default=None,
         help="For debugging purposes or quicker training, truncate the number of evaluation examples to this value if set.",
     )
-    parser.add_argument("--eval_interval", 
-                        type=str, 
-                        default="1ep", 
-                        help="Interval to evaluate the model.")
-    parser.add_argument("--per_device_eval_batch_size", 
-                        type=int, 
-                        default=8, 
-                        help="Batch size (per device) for the evaluation dataloader.")
+    parser.add_argument(
+        "--eval_interval", 
+        type=str, 
+        default="1ep", 
+        help="Interval to evaluate the model."
+    )
+    parser.add_argument(
+        "--per_device_eval_batch_size", 
+        type=int, 
+        default=8, 
+        help="Batch size (per device) for the evaluation dataloader."
+    )
 
     # training setups
     parser.add_argument(
@@ -220,16 +238,20 @@ def parse_args():
     parser.add_argument("--beta2", type=float, default=0.95, help="The beta2 of PLATON pruner.")
 
     # pruning algorithm
-    parser.add_argument('--non_mask_name', 
-                        nargs='+', 
-                        type=str, 
-                        default=["layernorm"],
-                        help="The names of the modules that should not be pruned.")
-    parser.add_argument("--pruner", 
-                        type=str, 
-                        default="PMGP", 
-                        help="The pruner to use.", 
-                        choices=["PMGP", "PLATON"])
+    parser.add_argument(
+        '--non_mask_name',     
+        nargs='+', 
+        type=str, 
+        default=["layernorm"],
+        help="The names of the modules that should not be pruned."
+    )
+    parser.add_argument(
+        "--pruner", 
+        type=str, 
+        default="PMGP", 
+        help="The pruner to use.", 
+        choices=["PMGP", "PLATON"]
+    )
 
     args = parser.parse_args()
 
