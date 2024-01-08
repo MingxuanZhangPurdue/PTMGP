@@ -52,8 +52,7 @@ def parse_args():
     # dataset, model, and tokenizer
     parser.add_argument(
         "--trust_remote_code",
-        type=bool,
-        default=False,
+        action="store_true",
         help=(
             "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
             "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
