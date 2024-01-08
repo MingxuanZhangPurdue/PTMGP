@@ -138,6 +138,12 @@ def parse_args():
                         default='ep{epoch}-ba{batch}-rank{rank}.pt', help="Filename to save the checkpoints.")
     
     # evaluation
+    parser.add_argument(
+        "--max_eval_samples",
+        type=int,
+        default=None,
+        help="For debugging purposes or quicker training, truncate the number of evaluation examples to this value if set.",
+    )
     parser.add_argument("--eval_interval", 
                         type=str, 
                         default="1ep", 
