@@ -1,8 +1,4 @@
 import argparse
-from dataclasses import dataclass, field
-from typing import Optional
-
-import numpy as np
 from datasets import load_dataset
 from torch.utils.data import DataLoader
 
@@ -15,22 +11,20 @@ from transformers import (
     default_data_collator,
 )
 
-import composer
+from torchmetrics.classification import MulticlassAccuracy, MulticlassMatthewsCorrCoef, MulticlassF1Score
+from torchmetrics.regression import SpearmanCorrCoef, PearsonCorrCoef
+
+from composer.utils.dist import get_sampler,
 from composer.utils import reproducibility
 from composer.core import Evaluator
 from composer import Time, TimeUnit
-from composer.utils import dist
 from composer.models.huggingface import HuggingFaceModel
-from torchmetrics.classification import MulticlassAccuracy, MulticlassMatthewsCorrCoef, MulticlassF1Score
-from torchmetrics.regression import SpearmanCorrCoef, PearsonCorrCoef
 from composer import Trainer
-from composer.metrics import BinaryF1Score
 from composer.callbacks import LRMonitor, RuntimeEstimator
 from composer.loggers import WandBLogger
+from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler
 from pruners.PMGP import PMGP_Algorithm
 from pruners.PLATON import PLATON_Algorithm
-
-
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -311,15 +305,15 @@ def main():
             use_fp16 = False
         data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=(8 if use_fp16 else None))
 
-    train_sampler = dist.get_sampler(train_dataset, shuffle=True)
-    eval_sampler = dist.get_sampler(eval_dataset, shuffle=False)
+    train_sampler = get_sampler(train_dataset, shuffle=True)
+    eval_sampler = get_sampler(eval_dataset, shuffle=False)
 
     train_dataloader = DataLoader(train_dataset, collate_fn=data_collator, batch_size=args.per_device_train_batch_size, sampler=train_sampler)
     eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size, sampler=eval_sampler)
 
     if args.task_name == "mnli":
         mm_eval_dataset = processed_datasets["validation_mismatched"]
-        mm_eval_sampler = dist.get_sampler(mm_eval_dataset, shuffle=False)
+        mm_eval_sampler = get_sampler(mm_eval_dataset, shuffle=False)
         mm_eval_dataloader = DataLoader(mm_eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size, sampler=mm_eval_sampler)
         mnli_matched_task = Evaluator(
             label='mnli_matched_accuracy',
@@ -333,8 +327,17 @@ def main():
         )
 
     # optimizer and learning rate scheduler creation
-    optimizer = torch.optim.AdamW(composer_model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-    lr_scheduler = composer.optim.LinearWithWarmupScheduler(t_warmup=args.t_warmup, alpha_f=args.alpha_f)
+    optimizer = DecoupledAdamW(
+        composer_model.parameters(), 
+        lr=args.learning_rate, 
+        betas=[0.9, 0.98], 
+        eps=1.0e-06, 
+        weight_decay=args.weight_decay
+    )
+    lr_scheduler = LinearWithWarmupScheduler(
+        t_warmup=args.t_warmup, 
+        alpha_f=args.alpha_f
+    )
 
     # initialize the wandb logger
     wandb_logger = WandBLogger(
