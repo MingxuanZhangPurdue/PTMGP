@@ -212,7 +212,7 @@ def parse_args():
         default=0.0, 
         help="Final learning rate multiplier for the linear lr scheduler."
     )
-    parse_args(
+    parser.add_argument(
         "--t_0",
         type=str,
         default="0.1dur",
