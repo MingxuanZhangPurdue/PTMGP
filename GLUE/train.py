@@ -436,7 +436,7 @@ def main():
     elif args.lr_scheduler_type == "cosine":
         lr_scheduler = CosineAnnealingWarmRestartsScheduler(
             t_0=args.t_0, 
-            t_mult=args.t_mult
+            t_mult=args.t_mult,
             alpha_f=args.alpha_f
         )
     else:
