@@ -193,11 +193,11 @@ def parse_args():
     )
 
     # lr scheduler
-    parse_args(
-        "--lr_scheduler_type",
-        type=str,
-        default="linear",
-        help="The type of the lr scheduler.",
+    parser.add_argument(
+        "--lr_scheduler_type", 
+        type=str, 
+        default="linear", 
+        help="The type of the lr scheduler.", 
         choices=["linear", "cosine"]
     )
     parser.add_argument(
@@ -430,12 +430,12 @@ def main():
     )
     if args.lr_scheduler_type == "linear":
         lr_scheduler = LinearWithWarmupScheduler(
-            t_warmup=args.t_warmup, 
+            t_warmup=args.t_warmup,
             alpha_f=args.alpha_f
         )
     elif args.lr_scheduler_type == "cosine":
         lr_scheduler = CosineAnnealingWarmRestartsScheduler(
-            t_0=args.t_0, 
+            t_0=args.t_0,
             t_mult=args.t_mult,
             alpha_f=args.alpha_f
         )
