@@ -24,7 +24,7 @@ from composer.models.huggingface import HuggingFaceModel
 from composer import Trainer
 from composer.callbacks import LRMonitor, RuntimeEstimator
 from composer.loggers import WandBLogger
-from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler
+from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler, CosineAnnealingWarmRestartsScheduler
 
 from pruners.PMGP import PMGP_Algorithm
 from pruners.PLATON import PLATON_Algorithm
@@ -104,7 +104,6 @@ def parse_args():
         type=str,
         help="Path to pretrained model or model identifier from huggingface.co/models.",
     )
-
 
     # checkpointing
     parser.add_argument(
@@ -192,6 +191,15 @@ def parse_args():
         default="1ep", 
         help="Total number of training epochs/batches/steps to perform."
     )
+
+    # lr scheduler
+    parse_args(
+        "--lr_scheduler_type",
+        type=str,
+        default="linear",
+        help="The type of the lr scheduler.",
+        choices=["linear", "cosine"]
+    )
     parser.add_argument(
         "--t_warmup", 
         type=str, 
@@ -203,6 +211,18 @@ def parse_args():
         type=float, 
         default=0.0, 
         help="Final learning rate multiplier for the linear lr scheduler."
+    )
+    parse_args(
+        "--t_0",
+        type=str,
+        default="0.1dur",
+        help="The period of the first cycle of the cosine lr scheduler."
+    )
+    parser.add_argument(
+        "--t_mult",
+        type=float,
+        default=1.0,
+        help="The period multiplier of the cosine lr scheduler."
     )
 
     # wandb logging
@@ -408,10 +428,19 @@ def main():
         eps=1.0e-06, 
         weight_decay=args.weight_decay
     )
-    lr_scheduler = LinearWithWarmupScheduler(
-        t_warmup=args.t_warmup, 
-        alpha_f=args.alpha_f
-    )
+    if args.lr_scheduler_type == "linear":
+        lr_scheduler = LinearWithWarmupScheduler(
+            t_warmup=args.t_warmup, 
+            alpha_f=args.alpha_f
+        )
+    elif args.lr_scheduler_type == "cosine":
+        lr_scheduler = CosineAnnealingWarmRestartsScheduler(
+            t_0=args.t_0, 
+            t_mult=args.t_mult
+            alpha_f=args.alpha_f
+        )
+    else:
+        raise ValueError(f"Unsupported lr scheduler type: {args.lr_scheduler_type}")
 
     # initialize the wandb logger
     wandb_logger = WandBLogger(
