@@ -59,6 +59,11 @@ class PMGP_Algorithm(Algorithm):
                     non_mask_name=args.non_mask_name,
                     non_prior_name=args.non_prior_name
                     )
+    
+    def lambda_linear_scheduler(self, train_step_index):
+        frac_of_total = min(1.0, (train_step_index / self.cubic_prune_end))
+        current_factor = self.alpha_i + frac_of_total * (self.alpha_f - self.alpha_i)
+        return current_factor*self.lambda_mix
 
     def whether_mask_para(self, n):
         if self.non_mask_name_pattern == None:
