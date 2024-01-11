@@ -4,14 +4,17 @@ import numpy as np
 from composer.core import Algorithm, Event
 
 class PMGP_Algorithm(Algorithm):
-    def __init__(self, 
+    def __init__(self,
                  train_size, max_train_steps,
                  final_ratio=1, initial_ratio=1,
-                 sigma0=1e-15, sigma1=0.1, 
-                 lambda_mix=1e-7, alpha_i_lambda = 1.0, alpha_f_lambda = 1.0,
-                 anneal_start = 0, anneal_end = 0,
-                 initial_warmup = 0.0, final_warmup = 1, deltaT = 1,
-                 masking_value = 0.0, non_mask_name=None, non_prior_name=None):
+                 sigma0=1e-15, sigma1=0.1,
+                 lambda_mix=1e-7, 
+                 alpha_i_lambda=1.0, alpha_f_lambda=1.0, 
+                 anneal_start_lambda=None, anneal_end_lambda=None,
+                 anneal_start_prior=0, anneal_end_prior=1, 
+                 initial_warmup=0.0, final_warmup=1, deltaT=1,
+                 masking_value=0.0,
+                 non_mask_name=None, non_prior_name=None):
         
         self.train_size = train_size
         self.max_train_steps = max_train_steps
@@ -22,12 +25,13 @@ class PMGP_Algorithm(Algorithm):
         self.lambda_mix = lambda_mix
         self.alpha_i_lambda = alpha_i_lambda
         self.alpha_f_lambda = alpha_f_lambda
+
         self.sigma0 = sigma0
         self.sigma1 = sigma1
 
-        self.anneal_start = anneal_start
-        self.anneal_end = anneal_end
-        self.prior_warmup = anneal_end - anneal_start
+        self.anneal_start_prior = anneal_start_prior
+        self.anneal_end_prior = anneal_end_prior
+        self.prior_warmup_steps = anneal_end_prior - anneal_start_prior
 
         self.final_ratio = final_ratio
         self.initial_ratio = initial_ratio
@@ -36,11 +40,16 @@ class PMGP_Algorithm(Algorithm):
         self.final_warmup = final_warmup
         self.deltaT = deltaT
         
-        cubic_prune_start = anneal_end + initial_warmup
+        cubic_prune_start = anneal_end_prior + initial_warmup
         cubic_prune_end = max_train_steps - final_warmup
+
+        self.anneal_start_lambda = anneal_start_lambda if anneal_start_lambda is not None else cubic_prune_start
+        self.anneal_end_lambda = anneal_end_lambda if anneal_end_lambda is not None else cubic_prune_end
+        self.lambda_mix_scheduler_steps = self.anneal_end_lambda - self.anneal_start_lambda
+
         
-        if not (anneal_end <= cubic_prune_start <= cubic_prune_end <= max_train_steps):
-            print ("anneal_end:", anneal_end)
+        if not (anneal_end_prior <= cubic_prune_start <= cubic_prune_end <= max_train_steps):
+            print ("anneal_end_prior:", anneal_end_prior)
             print ("cubic_prune_start:", cubic_prune_start)
             print ("cubic_prune_end:", cubic_prune_end)
             print ("max_train_steps:", max_train_steps)
@@ -52,11 +61,14 @@ class PMGP_Algorithm(Algorithm):
 
     @classmethod
     def from_args(self, train_size, max_train_steps, args):
-        return self(train_size, max_train_steps,
+        return self(train_size, 
+                    max_train_steps,
                     final_ratio=args.final_ratio, initial_ratio=args.initial_ratio,
-                    sigma0=args.sigma0, sigma1=args.sigma1, lambda_mix=args.lambda_mix,
+                    sigma0=args.sigma0, sigma1=args.sigma1, 
+                    lambda_mix=args.lambda_mix,
                     alpha_i_lambda=args.alpha_i_lambda, alpha_f_lambda=args.alpha_f_lambda,
-                    anneal_start=args.anneal_start, anneal_end=args.anneal_end,
+                    anneal_start_lambda=args.anneal_start_lambda, anneal_end_lambda=args.anneal_end_lambda,
+                    anneal_start_prior=args.anneal_start_prior,   anneal_end_prior=args.anneal_end_prior,
                     initial_warmup=args.initial_warmup, final_warmup=args.final_warmup,
                     deltaT=args.deltaT,
                     masking_value=args.masking_value, 
@@ -65,9 +77,9 @@ class PMGP_Algorithm(Algorithm):
                     )
     
     def lambda_linear_scheduler(self, train_step_index):
-        if train_step_index <= self.cubic_prune_start:
+        if train_step_index <= self.anneal_start_lambda:
             return self.lambda_mix
-        frac_of_total = min(1.0, (train_step_index / self.cubic_prune_end))
+        frac_of_total = min(1.0, (train_step_index - self.anneal_start_lambda) / (self.lambda_mix_scheduler_steps))
         current_factor = self.alpha_i_lambda + frac_of_total * (self.alpha_f_lambda - self.alpha_i_lambda)
         return current_factor*self.lambda_mix
 
@@ -94,34 +106,31 @@ class PMGP_Algorithm(Algorithm):
         prior_threshold = np.sqrt(np.log((1 - lambda_mix) / lambda_mix * np.sqrt(sigma_1 / sigma_0)) / (
                     0.5 / sigma_0 - 0.5 / sigma_1))
         
-        return c1, c2, prior_threshold
+        return c1, c2, prior_threshold, lambda_mix
     
     def add_prior_grad(self, model, train_step_index):
         
-        anneal_start = self.anneal_start
-        anneal_end = self.anneal_end
-        prior_warmup = self.prior_warmup
+        anneal_start_prior = self.anneal_start_prior
+        prior_warmup_steps = self.prior_warmup_steps
         
-        if train_step_index < anneal_start:
-            anneal_lambda = 0
-        elif anneal_start <= train_step_index < anneal_end:
-            anneal_lambda = 1.0 * (train_step_index - anneal_start)/prior_warmup
+        if train_step_index <= anneal_start_prior:
+            prior_warmup_factor = 0
         else:
-            anneal_lambda = 1.0
+            prior_warmup_factor = min(1.0, (train_step_index - anneal_start_prior) / (prior_warmup_steps))
                 
         sigma_1 = self.sigma1
         sigma_0 = self.sigma0
-        c1, c2, prior_threshold = self.calculate_prior_threshold(train_step_index)
+        c1, c2, prior_threshold, lambda_mix = self.calculate_prior_threshold(train_step_index)
         
-        if anneal_lambda > 0:
+        if prior_warmup_factor > 0:
             with torch.no_grad():
                 for n, p in model.named_parameters():
                     if self.whether_penalize_para(n):
                         temp = p.pow(2).mul(c2).add(c1).exp().add(1).pow(-1)
                         temp = p.div(-sigma_0).mul(temp) + p.div(-sigma_1).mul(1 - temp)
                         prior_grad = temp.div(self.train_size)
-                        p.grad.data -= anneal_lambda*prior_grad
-        return prior_threshold, anneal_lambda
+                        p.grad.data -= prior_warmup_factor*prior_grad
+        return prior_threshold, prior_warmup_factor, lambda_mix
     
     def mask_with_threshold(self, model, ratio):
         
@@ -136,9 +145,10 @@ class PMGP_Algorithm(Algorithm):
         mask_threshold = torch.kthvalue(all_is, int(all_is.shape[0] * (1 - ratio)))[0].item()
         
         # Mask weights whose importance lower than threshold
-        for n, p in model.named_parameters():
-            if self.whether_mask_para(n):
-                p.data.masked_fill_(is_dict[n] < mask_threshold, self.masking_value)
+        with torch.no_grad():
+            for n, p in model.named_parameters():
+                if self.whether_mask_para(n):
+                    p.data.masked_fill_(is_dict[n] < mask_threshold, self.masking_value)
                 
         return mask_threshold
    
@@ -176,14 +186,14 @@ class PMGP_Algorithm(Algorithm):
             mask_ind = True if train_step_index % deltaT == 0 else False
         return ratio, mask_ind
     
-    @torch.no_grad()
     def calculate_sparsity(self, model):
         n_params = 0
         n_masked_params = 0
-        for n, p in model.named_parameters():
-            if self.whether_mask_para(n):
-                n_params += p.numel()
-                n_masked_params += p.data.eq(0.0).sum().item()
+        with torch.no_grad():
+            for n, p in model.named_parameters():
+                if self.whether_mask_para(n):
+                    n_params += p.numel()
+                    n_masked_params += p.data.eq(0.0).sum().item()
         return n_masked_params/n_params
 
     def match(self, event, state):
@@ -191,7 +201,10 @@ class PMGP_Algorithm(Algorithm):
 
     def apply(self, event, state, logger):
         if event == Event.AFTER_TRAIN_BATCH:
-            self.add_prior_grad(state.model, state.timestamp.batch.value)
+            prior_threshold, prior_warmup_factor, lambda_mix = self.add_prior_grad(state.model, state.timestamp.batch.value)
+            logger.log_metrics({"lambda_mix": float(lambda_mix)})
+            logger.log_metrics({"prior_threshold": float(prior_threshold)})
+            logger.log_metrics({"prior_warmup_factor": float(prior_warmup_factor)})
         elif event == Event.BATCH_END:
             ratio, mask_threshold = self.magnitude_pruning(state.model, state.timestamp.batch.value)
             logger.log_metrics({"remaining_ratio": float(ratio)})
