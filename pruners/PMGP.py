@@ -8,8 +8,7 @@ class PMGP_Algorithm(Algorithm):
                  train_size, max_train_steps,
                  final_ratio=1, initial_ratio=1,
                  sigma0=1e-15, sigma1=0.1, 
-                 lambda_mix=1e-7,
-                 alpha_i = 1.0, alpha_f = 1.0,
+                 lambda_mix=1e-7, alpha_i_lambda = 1.0, alpha_f_lambda = 1.0,
                  anneal_start = 0, anneal_end = 0,
                  initial_warmup = 0.0, final_warmup = 1, deltaT = 1,
                  masking_value = 0.0, non_mask_name=None, non_prior_name=None):
@@ -21,8 +20,8 @@ class PMGP_Algorithm(Algorithm):
         self.non_prior_name_pattern = re.compile("|".join(non_prior_name), re.IGNORECASE) if non_prior_name is not None else None
 
         self.lambda_mix = lambda_mix
-        self.alpha_i = alpha_i
-        self.alpha_f = alpha_f
+        self.alpha_i_lambda = alpha_i_lambda
+        self.alpha_f_lambda = alpha_f_lambda
         self.sigma0 = sigma0
         self.sigma1 = sigma1
 
@@ -56,6 +55,7 @@ class PMGP_Algorithm(Algorithm):
         return self(train_size, max_train_steps,
                     final_ratio=args.final_ratio, initial_ratio=args.initial_ratio,
                     sigma0=args.sigma0, sigma1=args.sigma1, lambda_mix=args.lambda_mix,
+                    alpha_i_lambda=args.alpha_i_lambda, alpha_f_lambda=args.alpha_f_lambda,
                     anneal_start=args.anneal_start, anneal_end=args.anneal_end,
                     initial_warmup=args.initial_warmup, final_warmup=args.final_warmup,
                     deltaT=args.deltaT,
@@ -68,7 +68,7 @@ class PMGP_Algorithm(Algorithm):
         if train_step_index <= self.cubic_prune_start:
             return self.lambda_mix
         frac_of_total = min(1.0, (train_step_index / self.cubic_prune_end))
-        current_factor = self.alpha_i + frac_of_total * (self.alpha_f - self.alpha_i)
+        current_factor = self.alpha_i_lambda + frac_of_total * (self.alpha_f_lambda - self.alpha_i_lambda)
         return current_factor*self.lambda_mix
 
     def whether_mask_para(self, n):
