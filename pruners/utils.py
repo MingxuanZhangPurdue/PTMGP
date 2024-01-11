@@ -1,5 +1,19 @@
 import torch
+import math
+from composer.optim import ComposerScheduler,  _convert_time
 
+class LinearWithRewindsScheduler(ComposerScheduler):
+
+    def __init__(self, t_0, alpha_f = 0.0):
+        self.t_0 = t_0
+        self.alpha_f = alpha_f
+
+    def __call__(self, state):
+
+        current_factor = 1
+
+        return current_factor
+    
 # calculate the magnitude mask threshold for a given sparsity
 @torch.no_grad()
 def calculate_magnitude_mask_threshold(model, sparsity, non_mask_name=None):
