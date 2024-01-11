@@ -7,7 +7,9 @@ class PMGP_Algorithm(Algorithm):
     def __init__(self, 
                  train_size, max_train_steps,
                  final_ratio=1, initial_ratio=1,
-                 sigma0=1e-15, sigma1=0.1, lambda_mix=1e-7,
+                 sigma0=1e-15, sigma1=0.1, 
+                 lambda_mix=1e-7,
+                 alpha_i = 1.0, alpha_f = 1.0,
                  anneal_start = 0, anneal_end = 0,
                  initial_warmup = 0.0, final_warmup = 1, deltaT = 1,
                  masking_value = 0.0, non_mask_name=None, non_prior_name=None):
@@ -19,6 +21,8 @@ class PMGP_Algorithm(Algorithm):
         self.non_prior_name_pattern = re.compile("|".join(non_prior_name), re.IGNORECASE) if non_prior_name is not None else None
 
         self.lambda_mix = lambda_mix
+        self.alpha_i = alpha_i
+        self.alpha_f = alpha_f
         self.sigma0 = sigma0
         self.sigma1 = sigma1
 
@@ -61,6 +65,8 @@ class PMGP_Algorithm(Algorithm):
                     )
     
     def lambda_linear_scheduler(self, train_step_index):
+        if train_step_index <= self.cubic_prune_start:
+            return self.lambda_mix
         frac_of_total = min(1.0, (train_step_index / self.cubic_prune_end))
         current_factor = self.alpha_i + frac_of_total * (self.alpha_f - self.alpha_i)
         return current_factor*self.lambda_mix
@@ -77,12 +83,11 @@ class PMGP_Algorithm(Algorithm):
         else:
             return not bool(re.search(self.non_prior_name_pattern, n))
 
-    def calculate_prior_threshold(self):
+    def calculate_prior_threshold(self, train_step_index):
 
-        lambda_mix = self.lambda_mix
+        lambda_mix = self.lambda_linear_scheduler(train_step_index)
         sigma_1 = self.sigma1
         sigma_0 = self.sigma0
-
 
         c1 = np.log(lambda_mix) - np.log(1 - lambda_mix) + 0.5 * np.log(sigma_0) - 0.5 * np.log(sigma_1)
         c2 = 0.5 / sigma_0 - 0.5 / sigma_1
@@ -106,7 +111,7 @@ class PMGP_Algorithm(Algorithm):
                 
         sigma_1 = self.sigma1
         sigma_0 = self.sigma0
-        c1, c2, prior_threshold = self.calculate_prior_threshold()
+        c1, c2, prior_threshold = self.calculate_prior_threshold(train_step_index)
         
         if anneal_lambda > 0:
             with torch.no_grad():
