@@ -150,13 +150,13 @@ def parse_args():
     parser.add_argument(
         "--eval_interval", 
         type=str, 
-        default="1ep", 
+        default="0.1dur", 
         help="Interval to evaluate the model."
     )
     parser.add_argument(
         "--per_device_eval_batch_size", 
         type=int, 
-        default=256, 
+        default=256,
         help="Batch size (per device) for the evaluation dataloader."
     )
 
@@ -171,7 +171,7 @@ def parse_args():
     parser.add_argument(
         "--per_device_train_batch_size",
         type=int,
-        default=8,
+        default=32,
         help="Batch size (per device) for the training dataloader.",
     )
     parser.add_argument(
@@ -182,13 +182,14 @@ def parse_args():
     )
     parser.add_argument(
         "--weight_decay", 
-        type=float, default=0.0,  
+        type=float, 
+        default=0.0,  
         help="Weight decay to use."
     )
     parser.add_argument(
         "--max_duration", 
         type=str,   
-        default="1ep", 
+        default="1ep",
         help="Total number of training epochs/batches/steps to perform."
     )
 
@@ -258,7 +259,7 @@ def parse_args():
     parser.add_argument("--sigma0",             type=float, default=1e-15, help="The smaller variance of the Mixture Gaussian prior.")
     parser.add_argument("--sigma1",             type=float, default=0.1,  help="The larger variance of the Mixture Gaussian orior.")
 
-    parser.add_argument("--lambda_mix",         type=float, default=1e-5,  help="The mixing coefficient of the Mixture Gaussian prior.")
+    parser.add_argument("--lambda_mix",         type=float, default=1e-4,  help="The mixing coefficient of the Mixture Gaussian prior.")
     parser.add_argument("--alpha_i_lambda",     type=float, default=1.0,   help="The initial factor value of the lambda_mix.")
     parser.add_argument("--alpha_f_lambda",     type=float, default=1.0,   help="The final factor value of the lambda_mix.")
     parser.add_argument("--anneal_start_lambda",type=int,   default=None,  help="The number of traing batches/steps for lambda_mix annealing to start.")

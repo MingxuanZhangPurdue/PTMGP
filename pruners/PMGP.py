@@ -8,11 +8,11 @@ class PMGP_Algorithm(Algorithm):
                  train_size, max_train_steps,
                  final_ratio=1, initial_ratio=1,
                  sigma0=1e-15, sigma1=0.1,
-                 lambda_mix=1e-7, 
-                 alpha_i_lambda=1.0, alpha_f_lambda=1.0, 
+                 lambda_mix=1e-4, 
+                 alpha_i_lambda=1.0, alpha_f_lambda=0.001,
                  anneal_start_lambda=None, anneal_end_lambda=None,
                  anneal_start_prior=0, anneal_end_prior=1, 
-                 initial_warmup=0.0, final_warmup=1, deltaT=1,
+                 initial_warmup=0.0, final_warmup=1, deltaT=10,
                  masking_value=0.0,
                  non_mask_name=None, non_prior_name=None):
         
@@ -110,13 +110,10 @@ class PMGP_Algorithm(Algorithm):
     
     def add_prior_grad(self, model, train_step_index):
         
-        anneal_start_prior = self.anneal_start_prior
-        prior_warmup_steps = self.prior_warmup_steps
-        
-        if train_step_index <= anneal_start_prior:
+        if train_step_index <= self.anneal_start_prior:
             prior_warmup_factor = 0
         else:
-            prior_warmup_factor = min(1.0, (train_step_index - anneal_start_prior) / (prior_warmup_steps))
+            prior_warmup_factor = min(1.0, (train_step_index - self.anneal_start_prior) / (self.prior_warmup_steps))
                 
         sigma_1 = self.sigma1
         sigma_0 = self.sigma0
