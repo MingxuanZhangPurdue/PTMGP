@@ -48,7 +48,8 @@ class PMGP_Algorithm(Algorithm):
         self.lambda_mix_scheduler_steps = self.anneal_end_lambda - self.anneal_start_lambda
 
         
-        if not (anneal_end_prior <= cubic_prune_start <= cubic_prune_end <= max_train_steps):
+        if not (anneal_start_prior <= anneal_end_prior <= cubic_prune_start <= cubic_prune_end <= max_train_steps):
+            print ("anneal_start_prior:", anneal_start_prior)
             print ("anneal_end_prior:", anneal_end_prior)
             print ("cubic_prune_start:", cubic_prune_start)
             print ("cubic_prune_end:", cubic_prune_end)
@@ -110,7 +111,9 @@ class PMGP_Algorithm(Algorithm):
     
     def add_prior_grad(self, model, train_step_index):
         
-        if train_step_index <= self.anneal_start_prior:
+        if self.anneal_start_prior == self.anneal_end_prior:
+            prior_warmup_factor = 1.0
+        elif train_step_index <= self.anneal_start_prior:
             prior_warmup_factor = 0
         else:
             prior_warmup_factor = min(1.0, (train_step_index - self.anneal_start_prior) / (self.prior_warmup_steps))
@@ -183,7 +186,7 @@ class PMGP_Algorithm(Algorithm):
             mask_ind = True if train_step_index % deltaT == 0 else False
         return ratio, mask_ind
     
-    def calculate_sparsity(self, model):
+    def calculate_relative_sparsity(self, model):
         n_params = 0
         n_masked_params = 0
         with torch.no_grad():
@@ -209,5 +212,5 @@ class PMGP_Algorithm(Algorithm):
                 mask_threshold = 0.0
             logger.log_metrics({"mask_threshold": float(mask_threshold)})
         elif event == Event.FIT_END:
-            final_sparsity = self.calculate_sparsity(state.model)
-            logger.log_metrics({"final_sparsity": float(final_sparsity)})
+            relative_final_sparsity = self.calculate_relative_sparsity(state.model)
+            logger.log_metrics({"relative_final_sparsity": float(relative_final_sparsity)})
