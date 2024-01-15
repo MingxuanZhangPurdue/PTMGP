@@ -91,7 +91,7 @@ class PMGP_Algorithm(Algorithm):
     def calculate_prior_threshold(self, train_step_index):
         lambda_mix = self.lambda_linear_scheduler(train_step_index)
         sigma_1 = self.sigma1
-        sigma_0 = self.sigma0s
+        sigma_0 = self.sigma0
         c1 = np.log(lambda_mix) - np.log(1 - lambda_mix) + 0.5 * np.log(sigma_0) - 0.5 * np.log(sigma_1)
         c2 = 0.5 / sigma_0 - 0.5 / sigma_1
         prior_threshold = np.sqrt(np.log((1 - lambda_mix) / lambda_mix * np.sqrt(sigma_1 / sigma_0)) / (

@@ -5,9 +5,9 @@ from composer.core import Algorithm, Event
 class PLATON_Algorithm(Algorithm):
     def __init__(self, 
                  max_train_steps, 
-                 beta1=0.85, beta2=0.95,
-                 initial_ratio=1, final_ratio=0.5,
-                 initial_warmup=1, final_warmup=1, deltaT=1,
+                 beta1=0.85, beta2=0.85,
+                 initial_ratio=1, final_ratio=0.2,
+                 initial_warmup=1, final_warmup=1, deltaT=10,
                  non_mask_name=None):
 
         self.ipt = {}
