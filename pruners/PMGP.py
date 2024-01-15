@@ -69,7 +69,7 @@ class PMGP_Algorithm(Algorithm):
         if train_step_index <= self.anneal_start_lambda:
             return self.alpha_i_lambda*self.lambda_mix
         else:
-            if self.lambda_mix_scheduler_steps == 0:
+            if self.lambda_mix_scheduler_steps == 0 or self.alpha_i_lambda == self.alpha_f_lambda:
                 return self.alpha_f_lambda*self.lambda_mix
             else:
                 frac_of_total = min(1.0, (train_step_index - self.anneal_start_lambda) / (self.lambda_mix_scheduler_steps))
@@ -108,7 +108,7 @@ class PMGP_Algorithm(Algorithm):
                 if self.whether_penalize_para(n):
                     temp = p.pow(2).mul(c2).add(c1).exp().add(1).pow(-1)
                     temp = temp.mul((sigma_0-sigma_1)/(self.train_size*sigma_0*sigma_1)).add((-1)/(self.train_size*sigma_1))
-                    p.grad.data -= p.mul(temp)
+                    p.grad -= p.mul(temp)
         return prior_threshold, lambda_mix
     
     def mask_with_threshold(self, model, ratio):
@@ -124,7 +124,7 @@ class PMGP_Algorithm(Algorithm):
         with torch.no_grad():
             for n, p in model.named_parameters():
                 if self.whether_mask_para(n):
-                    p.data.masked_fill_(is_dict[n] < mask_threshold, self.masking_value)
+                    p.masked_fill_(is_dict[n] < mask_threshold, self.masking_value)
         return mask_threshold
    
     def magnitude_pruning(self, model, train_step_index):
@@ -165,7 +165,7 @@ class PMGP_Algorithm(Algorithm):
             for n, p in model.named_parameters():
                 if self.whether_mask_para(n):
                     n_params += p.numel()
-                    n_masked_params += p.data.eq(0.0).sum().item()
+                    n_masked_params += p.eq(0.0).sum().item()
         return n_masked_params/n_params
 
     def match(self, event, state):

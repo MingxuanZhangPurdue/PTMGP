@@ -63,7 +63,7 @@ class PLATON_Algorithm(Algorithm):
         if train_step_index <= cubic_prune_start:
             ratio = initial_ratio
             mask_ind = False
-        elif train_step_index >= cubic_prune_end:
+        elif train_step_index > cubic_prune_end:
             ratio = final_ratio
             mask_ind = True
         else:
@@ -74,7 +74,6 @@ class PLATON_Algorithm(Algorithm):
 
 
     def update_ipt_with_local_window(self, model, train_step_index):
-
         # Calculate the sensitivity and uncertainty 
         for n,p in model.named_parameters():
             if self.whether_mask_para(n):
@@ -100,7 +99,6 @@ class PLATON_Algorithm(Algorithm):
 
 
     def mask_with_threshold(self, model, ratio):
-
         # Calculate the final importance score
         is_dict = {}
         for n,p in model.named_parameters():
@@ -117,15 +115,15 @@ class PLATON_Algorithm(Algorithm):
         # Calculate the mask threshold 
         all_is = torch.cat([is_dict[n].view(-1) for n in is_dict])
         mask_threshold = torch.kthvalue(all_is, int(all_is.shape[0]*(1 - ratio)))[0].item()
-        # Mask weights whose importance lower than threshold 
-        for n,p in model.named_parameters():
-            if self.whether_mask_para(n):
-                p.data.masked_fill_(is_dict[n] < mask_threshold, 0.0)
+        # Mask weights whose importance lower than threshold
+        with torch.no_grad():
+            for n,p in model.named_parameters():
+                if self.whether_mask_para(n):
+                    p.masked_fill_(is_dict[n] < mask_threshold, 0.0)
         return mask_threshold
 
 
     def update_and_pruning(self, model, train_step_index):
-
         # Update importance score after optimizer stepping
         self.update_ipt_with_local_window(model, train_step_index)
         # Get the remaining ratio
@@ -145,7 +143,7 @@ class PLATON_Algorithm(Algorithm):
             for n, p in model.named_parameters():
                 if self.whether_mask_para(n):
                     n_params += p.numel()
-                    n_masked_params += p.data.eq(0.0).sum().item()
+                    n_masked_params += p.eq(0.0).sum().item()
         return n_masked_params/n_params
 
     def match(self, event, state):
