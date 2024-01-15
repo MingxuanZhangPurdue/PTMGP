@@ -13,9 +13,8 @@ class PMGP_Algorithm(Algorithm):
                  initial_warmup=0, final_warmup=0, deltaT=1,
                  masking_value=0.0,
                  non_mask_name=None,
-                 non_prior_name=None,
-                 ):
-        
+                 non_prior_name=None):
+                     
         self.train_size = train_size
         self.max_train_steps = max_train_steps
         self.masking_value = masking_value
