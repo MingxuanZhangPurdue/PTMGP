@@ -21,16 +21,14 @@ class PMGP_Algorithm(Algorithm):
         self.non_mask_name_pattern = re.compile("|".join(non_mask_name), re.IGNORECASE) if non_mask_name is not None else None
         self.non_prior_name_pattern = re.compile("|".join(non_prior_name), re.IGNORECASE) if non_prior_name is not None else None
 
+        self.sigma0 = sigma0
+        self.sigma1 = sigma1
         self.lambda_mix = lambda_mix
         self.alpha_i_lambda = alpha_i_lambda
         self.alpha_f_lambda = alpha_f_lambda
 
-        self.sigma0 = sigma0
-        self.sigma1 = sigma1
-
         self.final_ratio = final_ratio
         self.initial_ratio = initial_ratio
-        
         self.initial_warmup = initial_warmup
         self.final_warmup = final_warmup
         self.deltaT = deltaT
@@ -42,7 +40,6 @@ class PMGP_Algorithm(Algorithm):
         self.anneal_end_lambda = anneal_end_lambda if anneal_end_lambda is not None else cubic_prune_end
         self.lambda_mix_scheduler_steps = self.anneal_end_lambda - self.anneal_start_lambda
 
-        
         if not (cubic_prune_start <= cubic_prune_end <= max_train_steps):
             print ("cubic_prune_start:", cubic_prune_start)
             print ("cubic_prune_end:", cubic_prune_end)
