@@ -107,10 +107,8 @@ class PMGP_Algorithm(Algorithm):
             for n, p in model.named_parameters():
                 if self.whether_penalize_para(n):
                     temp = p.pow(2).mul(c2).add(c1).exp().add(1).pow(-1)
-                    #temp = p.div(-sigma_0).mul(temp) + p.div(-sigma_1).mul(1 - temp)
-                    #prior_grad = temp.div(self.train_size)
-                    prior_grad = p.div(-sigma_0*self.train_size).mul(temp) + p.div(-sigma_1*self.train_size).mul(1 - temp)
-                    p.grad.data -= prior_grad
+                    temp = temp.mul((sigma_0-sigma_1)/(self.train_size*sigma_0*sigma_1)).add((-1)/(self.train_size*sigma_1))
+                    p.grad.data -= p.mul(temp)
         return prior_threshold, lambda_mix
     
     def mask_with_threshold(self, model, ratio):
