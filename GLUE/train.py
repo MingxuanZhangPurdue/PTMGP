@@ -81,7 +81,7 @@ def parse_args():
     parser.add_argument(
         "--pad_to_max_length",
         action="store_true",
-        help="If passed, pad all samples to `max_length`. Otherwise, dynamic padding is used.",
+        help="If passed, pad all samples to `max_seq_length`. Otherwise, dynamic padding is used.",
     )
     parser.add_argument(
         "--cache_dir",
