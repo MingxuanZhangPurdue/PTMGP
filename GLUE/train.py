@@ -24,7 +24,7 @@ from composer.models.huggingface import HuggingFaceModel
 from composer import Trainer
 from composer.callbacks import LRMonitor, RuntimeEstimator
 from composer.loggers import WandBLogger
-from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler, CosineAnnealingWarmRestartsScheduler
+from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler
 
 from pruners.PMGP import PMGP_Algorithm
 from pruners.PLATON import PLATON_Algorithm
@@ -195,13 +195,6 @@ def parse_args():
 
     # lr scheduler
     parser.add_argument(
-        "--lr_scheduler_type", 
-        type=str, 
-        default="linear", 
-        help="The type of the lr scheduler.", 
-        choices=["linear", "cosine"]
-    )
-    parser.add_argument(
         "--t_warmup", 
         type=str, 
         default="0.05dur", 
@@ -212,18 +205,6 @@ def parse_args():
         type=float, 
         default=0.0, 
         help="Final learning rate multiplier for the linear lr scheduler."
-    )
-    parser.add_argument(
-        "--t_0",
-        type=str,
-        default="0.1dur",
-        help="The period of the first cycle of the cosine lr scheduler."
-    )
-    parser.add_argument(
-        "--t_mult",
-        type=float,
-        default=1.0,
-        help="The period multiplier of the cosine lr scheduler."
     )
 
     # wandb logging
@@ -429,19 +410,10 @@ def main():
         eps=1.0e-06, 
         weight_decay=args.weight_decay
     )
-    if args.lr_scheduler_type == "linear":
-        lr_scheduler = LinearWithWarmupScheduler(
-            t_warmup=args.t_warmup,
-            alpha_f=args.alpha_f
-        )
-    elif args.lr_scheduler_type == "cosine":
-        lr_scheduler = CosineAnnealingWarmRestartsScheduler(
-            t_0=args.t_0,
-            t_mult=args.t_mult,
-            alpha_f=args.alpha_f
-        )
-    else:
-        raise ValueError(f"Unsupported lr scheduler type: {args.lr_scheduler_type}")
+    lr_scheduler = LinearWithWarmupScheduler(
+        t_warmup=args.t_warmup,
+        alpha_f=args.alpha_f
+    )
 
     # initialize the wandb logger
     wandb_logger = WandBLogger(
