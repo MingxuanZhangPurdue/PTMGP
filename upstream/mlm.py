@@ -32,8 +32,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers model on a Masked Language Modeling task")
     parser.add_argument(
         "--trust_remote_code",
-        type=bool,
-        default=False,
+        action="store_true",
         help=(
             "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
             "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
@@ -74,13 +73,6 @@ def parse_args():
         help="Pretrained config name or path if not the same as model_name",
     )
     parser.add_argument(
-        "--model_type",
-        type=str,
-        default=None,
-        help="Model type to use if training from scratch.",
-        choices=MODEL_TYPES,
-    )
-    parser.add_argument(
         "--model_revision",
         type=str,
         default="main",
@@ -92,7 +84,7 @@ def parse_args():
     parser.add_argument(
         "--dataset_name",
         type=str,
-        default=None,
+        required=True,
         help="The name of the dataset to use (via the datasets library).",
     )
     parser.add_argument(
@@ -164,9 +156,15 @@ def parse_args():
 
     # training arguments
     parser.add_argument(
+        "--max_grad_norm",
+        type=float,
+        default=1.0,
+        help="Max gradient norm.",
+    )
+    parser.add_argument(
         "--precision",
         type=str,
-        default="fp32",
+        default="amp_fp16",
         help="The precision to use, can be fp32, amp_fp16, or amp_bf16.",
         choices=[None, "fp32", "amp_fp16", "amp_bf16"],
     )
@@ -258,7 +256,7 @@ def parse_args():
     parser.add_argument(
         "--per_device_eval_batch_size", 
         type=int, 
-        default=256,
+        default=128,
         help="Batch size (per device) for the evaluation dataloader."
     )
 
@@ -293,7 +291,7 @@ def parse_args():
 
     # PMGP
     parser.add_argument("--sigma0",             type=float, default=1e-15, help="The smaller variance of the Mixture Gaussian prior.")
-    parser.add_argument("--sigma1",             type=float, default=0.01,   help="The larger variance of the Mixture Gaussian prior.")
+    parser.add_argument("--sigma1",             type=float, default=0.01,  help="The larger variance of the Mixture Gaussian prior.")
     parser.add_argument("--lambda_mix",         type=float, default=1e-6,  help="The mixing coefficient of the Mixture Gaussian prior.")
     parser.add_argument("--alpha_i_lambda",     type=float, default=1.0,   help="The initial factor value of the lambda_mix.")
     parser.add_argument("--alpha_f_lambda",     type=float, default=0.01,  help="The final factor value of the lambda_mix.")
@@ -435,7 +433,7 @@ def main():
     pruner_algorithm = PMGP_Algorithm.from_args(train_size, max_train_steps, args)
 
     # gradient clipping following oBERT
-    gc = GradientClipping(clipping_type='norm', clipping_threshold=1.0)
+    gc = GradientClipping(clipping_type='norm', clipping_threshold=args.max_grad_norm)
 
     # initialize the trainer
     trainer = Trainer(
