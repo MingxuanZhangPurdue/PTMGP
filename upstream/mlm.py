@@ -300,7 +300,7 @@ def parse_args():
     parser.add_argument("--masking_value",      type=float, default=0.0,   help="The masking value for the pruned weights.")
     parser.add_argument('--non_prior_name',     
                         type=str,
-                        default=["layernorm", "classifier", "pooler", "embedding", "bias"],
+                        default=["layernorm", "classifier", "pooler", "embedding", "bias", "prediction"],
                         nargs='+',
                         help="The names of the modules that should not be penalized by the prior.")
 
@@ -309,7 +309,7 @@ def parse_args():
         '--non_mask_name', 
         nargs='+', 
         type=str, 
-        default=["layernorm", "classifier", "pooler", "embedding"],
+        default=["layernorm", "classifier", "pooler", "embedding", "bias", "prediction"],
         help="The names of the modules that should not be pruned. We will match the names using regex."
     )
     args = parser.parse_args()
