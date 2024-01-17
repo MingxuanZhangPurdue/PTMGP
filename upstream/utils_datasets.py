@@ -133,6 +133,7 @@ def _get_mlm_raw_datasets(args):
         args.dataset_name,
         args.dataset_config_name,
         cache_dir=args.cache_dir,
+        trust_remote_code=args.trust_remote_code,
     )
     if "validation" not in raw_datasets.keys():
         raw_datasets["validation"] = load_dataset(
@@ -140,12 +141,14 @@ def _get_mlm_raw_datasets(args):
             args.dataset_config_name,
             split=f"train[:{args.validation_split_percentage}%]",
             cache_dir=args.cache_dir,
+            trust_remote_code=args.trust_remote_code,
         )
         raw_datasets["train"] = load_dataset(
             args.dataset_name,
             args.dataset_config_name,
             split=f"train[{args.validation_split_percentage}%:]",
             cache_dir=args.cache_dir,
+            trust_remote_code=args.trust_remote_code,
         )
     if args.dataset_name_2 is not None:
         # Downloading and loading a dataset from the hub.
@@ -153,6 +156,7 @@ def _get_mlm_raw_datasets(args):
             args.dataset_name_2,
             args.dataset_config_name_2,
             cache_dir=args.cache_dir,
+            trust_remote_code=args.trust_remote_code,
         )
         if "validation" not in raw_datasets_2.keys():
             raw_datasets_2["validation"] = load_dataset(
@@ -160,12 +164,14 @@ def _get_mlm_raw_datasets(args):
                 args.dataset_config_name_2,
                 split=f"train[:{args.validation_split_percentage}%]",
                 cache_dir=args.cache_dir,
+                trust_remote_code=args.trust_remote_code,
             )
             raw_datasets_2["train"] = load_dataset(
                 args.dataset_name_2,
                 args.dataset_config_name_2,
                 split=f"train[{args.validation_split_percentage}%:]",
                 cache_dir=args.cache_dir,
+                trust_remote_code=args.trust_remote_code,
             )
 
         for split in ["validation", "train"]:

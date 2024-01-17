@@ -22,7 +22,7 @@ from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler
 from composer.metrics.nlp import LanguageCrossEntropy, MaskedAccuracy
 
 from pruners.PMGP import PMGP_Algorithm
-from utils_datasets import get_tokenized_mlm_datasets
+from upstream.utils_datasets import get_tokenized_mlm_datasets
 
 MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
@@ -475,3 +475,7 @@ def main():
 
     # Train
     trainer.fit()
+
+
+if __name__ == "__main__":
+    main()
