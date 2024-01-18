@@ -1,25 +1,44 @@
 import torch
 import re
 import numpy as np
-from composer.core import Algorithm, Event, Time, TimeUnit
+from composer.core import Algorithm, Event
+
+
+def _get_unit_and_value(time):
+    time_units = ["ep", "ba", "dur"]
+    # regex for parsing time string, matches timeunit and chars prior to unit as value
+    _TIME_STR_REGEX = re.compile(r'^(.+)(' + r'|'.join([fr'{time_unit}' for time_unit in time_units]) + r')$',
+                                flags=re.IGNORECASE)
+    match = _TIME_STR_REGEX.findall(time)
+    if len(match) != 1:
+        raise ValueError(f'Invalid time string: {time}')
+    match = match[0]
+    match = [x for x in match if x != '']
+    assert len(match) == 2, 'each match should have a number followed by the key'
+    value = match[0]
+    unit = match[1]
+    value = float(value)  # always parsing first as float b/c it could be scientific notation
+    if unit == "ba":
+        if int(value) != value:
+            raise TypeError(f'value {value} is not an integer. Units {unit} require integer values.')
+        value = int(value)
+    return unit, value
 
 def _convert_timestr_to_int(time, max_train_steps, train_dataloader_len):
     if isinstance(time, int):
         return time
     elif isinstance(time, str):
-        time = Time.from_timestring(time)
-        if time.unit == TimeUnit.DURATION:
-            return int(time.value*max_train_steps)
-        elif time.unit == TimeUnit.BATCH:
-            return int(time.value)
-        elif time.unit == TimeUnit.EPOCH:
-            return int(time.value*train_dataloader_len)
+        unit, value = _get_unit_and_value(time)
+        if unit.casefold() == "dur".casefold():
+            return int(value*max_train_steps)
+        elif unit.casefold() == "ba".casefold():
+            return int(value)
         else:
-            raise ValueError("the format of the time str is not supported, currenty only support *ep, *dur, and *ba.")
+            return int(value*train_dataloader_len)
     else:
-        raise ValueError("the type of time is not supported, currenty only support int and time str, i.e., 100, 1ep, 0.1dur, and 1ba.")
+        raise ValueError("time must be either int or str.")
 
-class PMGP_Algorithm(Algorithm):
+class BReg(Algorithm):
     def __init__(self,
                  train_size, max_train_steps,
                  sigma0=1e-15, sigma1=0.1, lambda_mix=1e-3,
@@ -66,6 +85,7 @@ class PMGP_Algorithm(Algorithm):
         self.cubic_prune_start = cubic_prune_start
         self.cubic_prune_end = cubic_prune_end
 
+
     @classmethod
     def from_args(self, train_size, max_train_steps, train_dataloader_len, args):
         initial_warmup = _convert_timestr_to_int(args.initial_warmup, max_train_steps, train_dataloader_len)
@@ -82,7 +102,7 @@ class PMGP_Algorithm(Algorithm):
                     masking_value=args.masking_value, 
                     non_mask_name=args.non_mask_name, non_prior_name=args.non_prior_name
                     )
-    
+
     def lambda_linear_scheduler(self, train_step_index):
         if train_step_index <= self.anneal_start_lambda:
             return self.alpha_i_lambda*self.lambda_mix
@@ -121,38 +141,52 @@ class PMGP_Algorithm(Algorithm):
         sigma_1 = self.sigma1
         sigma_0 = self.sigma0
         c1, c2, prior_threshold, lambda_mix = self.calculate_prior_threshold(train_step_index)
-        with torch.no_grad():
-            for n, p in model.named_parameters():
-                if self.whether_penalize_para(n):
-                    temp = p.pow(2).mul(c2).add(c1).exp().add(1).pow(-1)
-                    temp = temp.mul((sigma_0-sigma_1)/(self.train_size*sigma_0*sigma_1)).add((-1)/(self.train_size*sigma_1))
-                    p.grad -= p.mul(temp)
+        if train_step_index <= self.cubic_prune_end:
+            with torch.no_grad():
+                for n, p in model.named_parameters():
+                    if self.whether_penalize_para(n):
+                        temp = p.pow(2).mul(c2).add(c1).exp().add(1).pow(-1)
+                        temp = temp.mul((sigma_0-sigma_1)/(self.train_size*sigma_0*sigma_1)).add((-1)/(self.train_size*sigma_1))
+                        p.grad -= p.mul(temp)
         return prior_threshold, lambda_mix
     
     def mask_with_threshold(self, model, ratio):
         # Calculate the importance score
         is_dict = {}
-        for n, p in model.named_parameters():
-            if self.whether_mask_para(n):
-                is_dict[n] = p.abs().detach()
+        with torch.no_grad():
+            for n, p in model.named_parameters():
+                if self.whether_mask_para(n):
+                    is_dict[n] = p.abs().detach()
         # Calculate the mask threshold
         all_is = torch.cat([is_dict[n].view(-1) for n in is_dict])
         mask_threshold = torch.kthvalue(all_is, int(all_is.shape[0] * (1 - ratio)))[0].item()
         # Mask weights whose importance lower than threshold
+        current_mask = {}
         with torch.no_grad():
             for n, p in model.named_parameters():
                 if self.whether_mask_para(n):
-                    p.masked_fill_(is_dict[n] < mask_threshold, self.masking_value)
-        return mask_threshold
+                    current_mask[n] = (is_dict[n] < mask_threshold)
+                    p.masked_fill_(current_mask[n], self.masking_value)
+        return mask_threshold, current_mask
    
     def magnitude_pruning(self, model, train_step_index):
-        # Get the remaining ratio
-        ratio, mask_ind = self.cubic_remaining_ratio_scheduler(train_step_index)
-        if mask_ind:
-            # Mask weights during masking horizon
-            mask_threshold = self.mask_with_threshold(model, ratio)
+        if train_step_index < self.cubic_prune_end:
+            # Get the remaining ratio
+            ratio, mask_ind = self.cubic_remaining_ratio_scheduler(train_step_index)
+            if mask_ind:
+                # Mask weights during masking horizon
+                mask_threshold, current_mask = self.mask_with_threshold(model, ratio)
+            else:
+                mask_threshold = None
+        elif train_step_index == self.cubic_prune_end:
+            ratio = self.final_ratio
+            mask_threshold, current_mask = self.mask_with_threshold(model, ratio)
+            self.mask = current_mask
         else:
-            mask_threshold = None
+            ratio = self.final_ratio
+            mask_threshold = 0.0
+            self.prune_masked_weights(model, self.mask)
+            
         return ratio, mask_threshold
     
     def cubic_remaining_ratio_scheduler(self, train_step_index):
@@ -164,10 +198,13 @@ class PMGP_Algorithm(Algorithm):
         cubic_prune_end = self.cubic_prune_end
         ratio_scheduler_steps = self.ratio_scheduler_steps
         mask_ind = False
-        if train_step_index <= cubic_prune_start:
-            ratio = initial_ratio
+        if train_step_index < cubic_prune_start:
+            ratio = 1.0
             mask_ind = False
-        elif train_step_index > cubic_prune_end:
+        elif train_step_index == cubic_prune_start:
+            ratio = initial_ratio
+            mask_ind = True
+        elif train_step_index >= cubic_prune_end:
             ratio = final_ratio
             mask_ind = True
         else:
@@ -176,6 +213,12 @@ class PMGP_Algorithm(Algorithm):
             mask_ind = True if train_step_index % deltaT == 0 else False
         return ratio, mask_ind
     
+    def prune_masked_weights(self, model):
+        with torch.no_grad():
+            for n, p in model.named_parameters():
+                if self.whether_mask_para(n):
+                    p.data.masked_fill_(self.mask[n], 0.0)
+
     def calculate_relative_sparsity(self, model):
         n_params = 0
         n_masked_params = 0
