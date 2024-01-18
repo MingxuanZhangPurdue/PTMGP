@@ -3,7 +3,6 @@ import re
 import numpy as np
 from composer.core import Algorithm, Event
 
-
 def _get_unit_and_value(time):
     time_units = ["ep", "ba", "dur"]
     # regex for parsing time string, matches timeunit and chars prior to unit as value
