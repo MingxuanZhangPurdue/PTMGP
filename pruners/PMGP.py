@@ -1,7 +1,24 @@
 import torch
 import re
 import numpy as np
-from composer.core import Algorithm, Event
+from composer.core import Algorithm, Event, Time, TimeUnit
+
+def _convert_timestr_to_int(time, max_train_steps, train_dataloader_len):
+    if isinstance(time, int):
+        return time
+    elif isinstance(time, str):
+        time = Time.from_timestring(time)
+        if time.unit == TimeUnit.DURATION:
+            return int(time.value*max_train_steps)
+        elif time.unit == TimeUnit.BATCH:
+            return int(time.value)
+        elif time.unit == TimeUnit.EPOCH:
+            return int(time.value*train_dataloader_len)
+        else:
+            raise ValueError("the format of the time is not supported, currenty only support int and time string, i.e., 1ep, 0.1dur, 1ba, and 5000.")
+    else:
+        raise ValueError("the type of time is not supported, currenty only support int and time string, i.e., 1ep, 0.1dur, 1ba, and 5000.")
+
 
 class PMGP_Algorithm(Algorithm):
     def __init__(self,
@@ -51,13 +68,18 @@ class PMGP_Algorithm(Algorithm):
         self.cubic_prune_end = cubic_prune_end
 
     @classmethod
-    def from_args(self, train_size, max_train_steps, args):
+    def from_args(self, train_size, max_train_steps, train_dataloader_len, args):
+        initial_warmup = _convert_timestr_to_int(args.initial_warmup, max_train_steps, train_dataloader_len)
+        final_warmup = _convert_timestr_to_int(args.final_warmup, max_train_steps, train_dataloader_len)
+        deltaT = _convert_timestr_to_int(args.deltaT, max_train_steps, train_dataloader_len)
+        anneal_start_lambda = _convert_timestr_to_int(args.anneal_start_lambda, max_train_steps, train_dataloader_len) if args.anneal_start_lambda is not None else None
+        anneal_end_lambda = _convert_timestr_to_int(args.anneal_end_lambda, max_train_steps, train_dataloader_len) if args.anneal_end_lambda is not None else None
         return self(train_size, max_train_steps,
                     sigma0=args.sigma0, sigma1=args.sigma1, lambda_mix=args.lambda_mix,
                     alpha_i_lambda=args.alpha_i_lambda, alpha_f_lambda=args.alpha_f_lambda,
-                    anneal_start_lambda=args.anneal_start_lambda, anneal_end_lambda=args.anneal_end_lambda,
+                    anneal_start_lambda=anneal_start_lambda, anneal_end_lambda=anneal_end_lambda,
                     final_ratio=args.final_ratio, initial_ratio=args.initial_ratio,
-                    initial_warmup=args.initial_warmup, final_warmup=args.final_warmup, deltaT=args.deltaT,
+                    initial_warmup=initial_warmup, final_warmup=final_warmup, deltaT=deltaT,
                     masking_value=args.masking_value, 
                     non_mask_name=args.non_mask_name, non_prior_name=args.non_prior_name
                     )
