@@ -15,7 +15,7 @@ def _convert_timestr_to_int(time, max_train_steps, train_dataloader_len):
         elif time.unit == TimeUnit.EPOCH:
             return int(time.value*train_dataloader_len)
         else:
-            raise ValueError("the format of the time is not supported, currenty only support int and time string, i.e., 1ep, 0.1dur, 1ba, and 5000.")
+            raise ValueError("the format of the time string is not supported, currenty only support *ep, *dur, and *ba.")
     else:
         raise ValueError("the type of time is not supported, currenty only support int and time string, i.e., 1ep, 0.1dur, 1ba, and 5000.")
 
