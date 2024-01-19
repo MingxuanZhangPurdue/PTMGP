@@ -41,7 +41,6 @@ class LinearWithRewindsScheduler(ComposerScheduler):
                  alpha_f: float = 0.0):
         
         assert num_rewinds >= 1, "num_rewinds must be >= 1"
-
         rewind_start = Time.from_timestring(rewind_start) if isinstance(rewind_start, str) else rewind_start
         rewind_interval = Time.from_timestring(rewind_interval) if isinstance(rewind_interval, str) else rewind_interval
         assert rewind_start.unit == rewind_interval.unit, \
