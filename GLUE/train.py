@@ -487,9 +487,14 @@ def main():
         raise ValueError(f"Unsupported time unit: {train_time.unit}")
     
     if args.pruner == "PMGP":
-        pruner_algorithm = PMGP_Algorithm.from_args(train_size, max_train_steps, args)
+        pruner_algorithm = PMGP_Algorithm.from_args(train_size, max_train_steps, len(train_dataloader), args)
     elif args.pruner == "PLATON":
         pruner_algorithm = PLATON_Algorithm.from_args(max_train_steps, args)
+    elif args.pruner == "BReg":
+        pruner_algorithm = BReg.from_args(train_size, max_train_steps, len(train_dataloader), args)
+    else:
+        raise ValueError(f"Unsupported pruner: {args.pruner}")
+        
 
     # initialize the trainer
     trainer = Trainer(
