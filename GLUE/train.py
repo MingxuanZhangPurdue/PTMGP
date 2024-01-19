@@ -28,7 +28,7 @@ from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler, CosineAnne
 
 from pruners.PMGP import PMGP_Algorithm
 from pruners.PLATON import PLATON_Algorithm
-from pruners.BReg import BReg
+from pruners.BReg import BReg, LinearWithRewindsScheduler
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -200,19 +200,19 @@ def parse_args():
         type=str,
         default="linear",
         help="The lr scheduler to use.",
-        choices=["linear", "cosine"],
+        choices=["linear", "cosine", "linear_with_rewinds"],
     )
     parser.add_argument(
         "--t_warmup", 
         type=str, 
         default="0.05dur", 
-        help="Number of steps for the warmup in the lr scheduler."
+        help="Number of steps for the warmup in the linear lr scheduler."
     )
     parser.add_argument(
         "--alpha_f",
         type=float, 
         default=0.0, 
-        help="Final learning rate multiplier for the linear lr scheduler."
+        help="Final learning rate multiplier for lr scheduler."
     )
     parser.add_argument(
         "--t_0",
@@ -223,8 +223,26 @@ def parse_args():
     parser.add_argument(
         "--t_mult",
         type=float,
-        default=1/3,
+        default=1,
         help="Number of cycles for the cosine lr scheduler."
+    )
+    parser.add_argument(
+        "--rewind_interval",
+        type=str,
+        default="2ep",
+        help="Interval to rewind the lr scheduler."
+    )
+    parser.add_argument(
+        "--rewind_start",
+        type=str,
+        default="6ep",
+        help="Start to rewind the lr scheduler."
+    )
+    parser.add_argument(
+        "--num_rewinds",
+        type=int,
+        default=1,
+        help="Number of rewinds."
     )
 
     # wandb logging
@@ -430,10 +448,26 @@ def main():
         eps=1.0e-06, 
         weight_decay=args.weight_decay
     )
-    lr_scheduler = LinearWithWarmupScheduler(
-        t_warmup=args.t_warmup,
-        alpha_f=args.alpha_f
-    )
+    if args.lr_scheduler == "linear":
+        lr_scheduler = LinearWithWarmupScheduler(
+            t_warmup=args.t_warmup,
+            alpha_f=args.alpha_f
+        )
+    elif args.lr_scheduler == "cosine":
+        lr_scheduler = CosineAnnealingWarmRestartsScheduler(
+            t_0=args.t_0,
+            t_mult=args.t_mult,
+            alpha_f=args.alpha_f
+        )
+    elif args.lr_scheduler == "linear_with_rewinds":
+        lr_scheduler = LinearWithRewindsScheduler(
+            alpha_f=args.alpha_f,
+            rewind_interval=args.rewind_interval,
+            rewind_start=args.rewind_start,
+            num_rewinds=args.num_rewinds
+        )
+    else:
+        raise ValueError(f"Unsupported lr scheduler: {args.lr_scheduler}")
 
     # initialize the wandb logger
     wandb_logger = WandBLogger(
