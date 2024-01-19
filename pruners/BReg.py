@@ -250,7 +250,7 @@ class BReg(Algorithm):
             ratio, mask_ind = self.cubic_remaining_ratio_scheduler(train_step_index)
             if mask_ind and ratio < 1.0:
                 # Mask weights during masking horizon
-                mask_threshold, current_mask = self.mask_with_threshold(model, ratio)
+                mask_threshold, _ = self.mask_with_threshold(model, ratio)
             else:
                 mask_threshold = None
         elif train_step_index == self.cubic_prune_end:
@@ -260,7 +260,7 @@ class BReg(Algorithm):
         else:
             ratio = self.final_ratio
             mask_threshold = 0.0
-            self.prune_masked_weights(model, self.mask)
+            self.prune_masked_weights(model)
             
         return ratio, mask_threshold
     
