@@ -42,6 +42,14 @@ task_to_keys = {
     "wnli": ("sentence1", "sentence2"),
 }
 
+def my_custom_type(value):
+    try:
+        # Try to convert the value to an integer
+        return int(value)
+    except ValueError:
+        # If conversion to int fails, return the value as a string
+        return value
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune and prune a transformers model on a glue task.")
     
@@ -270,9 +278,9 @@ def parse_args():
     # cubic pruning scheduler
     parser.add_argument("--final_ratio",        type=float, default=0.2, help="The final ratio of the remaining weights.")
     parser.add_argument("--initial_ratio",      type=float, default=1,   help="The initial ratio of the remaining weights.")
-    parser.add_argument("--initial_warmup",     type=int,   default=1,   help="The number of training batches/steps for initial warmup.")
-    parser.add_argument("--final_warmup",       type=int,   default=1,   help="The number of training batches/steps for final warmup.")
-    parser.add_argument("--deltaT",             type=int,   default=10,  help="The interval to mask weights.")
+    parser.add_argument("--initial_warmup",     type=my_custom_type,   default=1,   help="The number of training batches/steps for initial warmup.")
+    parser.add_argument("--final_warmup",       type=my_custom_type,   default=1,   help="The number of training batches/steps for final warmup.")
+    parser.add_argument("--deltaT",             type=my_custom_type,   default=10,  help="The interval to mask weights.")
 
     # PMGP
     parser.add_argument("--sigma0",             type=float, default=1e-15, help="The smaller variance of the Mixture Gaussian prior.")
@@ -285,7 +293,7 @@ def parse_args():
     parser.add_argument("--masking_value",      type=float, default=0.0,   help="The masking value for the pruned weights.")
     parser.add_argument('--non_prior_name',     
                         type=str,
-                        default=["layernorm", "classifier", "pooler", "embedding", "bias"],
+                        default=None,
                         nargs='+',
                         help="The names of the modules that should not be penalized by the prior.")
 
