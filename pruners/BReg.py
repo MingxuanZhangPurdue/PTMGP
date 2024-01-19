@@ -59,8 +59,8 @@ class LinearWithRewindsScheduler(ComposerScheduler):
         self.num_rewinds = num_rewinds
         self.rewind_start = rewind_start
         self.rewind_interval = rewind_interval
-        self.alpha_i = alpha_i
-        self.alpha_f = alpha_f
+        #self.alpha_i = alpha_i
+        #self.alpha_f = alpha_f
 
         self.current_scheduler_index = 0
         self.next_rewind_time = self.rewind_start
@@ -123,6 +123,8 @@ class BReg(Algorithm):
                  masking_value=0.0,
                  non_mask_name=None,
                  non_prior_name=None):
+        
+        self.mask = None
                      
         self.train_size = train_size
         self.max_train_steps = max_train_steps
@@ -211,17 +213,18 @@ class BReg(Algorithm):
         return c1, c2, prior_threshold, lambda_mix
     
     def add_prior_grad(self, model, train_step_index):
-        # Add prior gradients to the model       
+        if train_step_index > self.cubic_prune_end:
+            return -1, -1
+        # Add prior gradients to the model during the gradual pruning stage
         sigma_1 = self.sigma1
         sigma_0 = self.sigma0
         c1, c2, prior_threshold, lambda_mix = self.calculate_prior_threshold(train_step_index)
-        if train_step_index <= self.cubic_prune_end:
-            with torch.no_grad():
-                for n, p in model.named_parameters():
-                    if self.whether_penalize_para(n):
-                        temp = p.pow(2).mul(c2).add(c1).exp().add(1).pow(-1)
-                        temp = temp.mul((sigma_0-sigma_1)/(self.train_size*sigma_0*sigma_1)).add((-1)/(self.train_size*sigma_1))
-                        p.grad -= p.mul(temp)
+        with torch.no_grad():
+            for n, p in model.named_parameters():
+                if self.whether_penalize_para(n):
+                    temp = p.pow(2).mul(c2).add(c1).exp().add(1).pow(-1)
+                    temp = temp.mul((sigma_0-sigma_1)/(self.train_size*sigma_0*sigma_1)).add((-1)/(self.train_size*sigma_1))
+                    p.grad -= p.mul(temp)
         return prior_threshold, lambda_mix
     
     def mask_with_threshold(self, model, ratio):
