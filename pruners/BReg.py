@@ -3,7 +3,7 @@ import re
 import numpy as np
 from typing import Union
 from composer.core import Algorithm, Event, State, Time
-from composer.optim import ComposerScheduler, _convert_time
+from composer.optim.scheduler import ComposerScheduler, _convert_time
 
 
 class RelativeLinearScheduler(ComposerScheduler):
