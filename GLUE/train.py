@@ -285,11 +285,13 @@ def parse_args():
     # PMGP
     parser.add_argument("--sigma0",             type=float, default=1e-15, help="The smaller variance of the Mixture Gaussian prior.")
     parser.add_argument("--sigma1",             type=float, default=0.1,   help="The larger variance of the Mixture Gaussian prior.")
+
     parser.add_argument("--lambda_mix",         type=float, default=1e-3,  help="The mixing coefficient of the Mixture Gaussian prior.")
     parser.add_argument("--alpha_i_lambda",     type=float, default=1.0,   help="The initial factor value of the lambda_mix.")
     parser.add_argument("--alpha_f_lambda",     type=float, default=0.01,  help="The final factor value of the lambda_mix.")
-    parser.add_argument("--anneal_start_lambda",type=int,   default=None,  help="The number of traing batches/steps for lambda_mix annealing to start.")
-    parser.add_argument("--anneal_end_lambda",  type=int,   default=None,  help="The number of traing batches/steps for lambda_mix annealing to end.")
+
+    parser.add_argument("--anneal_start_lambda",type=my_custom_type,   default=None,  help="The number of traing batches/steps for lambda_mix annealing to start.")
+    parser.add_argument("--anneal_end_lambda",  type=my_custom_type,   default=None,  help="The number of traing batches/steps for lambda_mix annealing to end.")
     parser.add_argument("--masking_value",      type=float, default=0.0,   help="The masking value for the pruned weights.")
     parser.add_argument('--non_prior_name',     
                         type=str,

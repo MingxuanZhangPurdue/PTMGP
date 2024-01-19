@@ -255,8 +255,8 @@ class BReg(Algorithm):
                 mask_threshold = None
         elif train_step_index == self.cubic_prune_end:
             ratio = self.final_ratio
-            mask_threshold, current_mask = self.mask_with_threshold(model, ratio)
-            self.mask = current_mask
+            mask_threshold, final_mask = self.mask_with_threshold(model, ratio)
+            self.mask = final_mask
         else:
             ratio = self.final_ratio
             mask_threshold = 0.0
