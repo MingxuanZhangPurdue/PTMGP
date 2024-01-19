@@ -24,10 +24,11 @@ from composer.models.huggingface import HuggingFaceModel
 from composer import Trainer
 from composer.callbacks import LRMonitor, RuntimeEstimator
 from composer.loggers import WandBLogger
-from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler
+from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler, CosineAnnealingWarmRestartsScheduler
 
 from pruners.PMGP import PMGP_Algorithm
 from pruners.PLATON import PLATON_Algorithm
+from pruners.BReg import BReg
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -195,6 +196,13 @@ def parse_args():
 
     # lr scheduler
     parser.add_argument(
+        "--lr_scheduler",
+        type=str,
+        default="linear",
+        help="The lr scheduler to use.",
+        choices=["linear", "cosine"],
+    )
+    parser.add_argument(
         "--t_warmup", 
         type=str, 
         default="0.05dur", 
@@ -205,6 +213,18 @@ def parse_args():
         type=float, 
         default=0.0, 
         help="Final learning rate multiplier for the linear lr scheduler."
+    )
+    parser.add_argument(
+        "--t_0",
+        type=str,
+        default="6ep",
+        help="Number of steps for the first cycle in the cosine lr scheduler."
+    )
+    parser.add_argument(
+        "--t_mult",
+        type=float,
+        default=1/3,
+        help="Number of cycles for the cosine lr scheduler."
     )
 
     # wandb logging
@@ -268,7 +288,7 @@ def parse_args():
         type=str, 
         default="PMGP", 
         help="The pruner to use.", 
-        choices=["PMGP", "PLATON"]
+        choices=["PMGP", "PLATON", "BReg"]
     )
 
     args = parser.parse_args()
