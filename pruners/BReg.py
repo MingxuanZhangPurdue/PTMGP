@@ -59,8 +59,6 @@ class LinearWithRewindsScheduler(ComposerScheduler):
         self.num_rewinds = num_rewinds
         self.rewind_start = rewind_start
         self.rewind_interval = rewind_interval
-        #self.alpha_i = alpha_i
-        #self.alpha_f = alpha_f
 
         self.current_scheduler_index = 0
         self.next_rewind_time = self.rewind_start
