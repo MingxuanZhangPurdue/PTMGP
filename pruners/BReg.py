@@ -126,10 +126,10 @@ class BReg(Algorithm):
     def __init__(self,
                  train_size,
                  max_train_steps,
-                 sigma0=1e-15,
+                 sigma0=1e-13,
                  alpha_i_sigma0=1.0, 
                  alpha_f_sigma0=1.0,
-                 sigma1=0.1,
+                 sigma1=0.05,
                  alpha_i_sigma1=1.0, 
                  alpha_f_sigma1=1.0,
                  lambda_mix=1e-3,
@@ -137,18 +137,17 @@ class BReg(Algorithm):
                  alpha_f_lambda=0.01,
                  anneal_start=None, 
                  anneal_end=None,
-                 final_ratio=0.2, 
+                 final_ratio=0.1, 
                  initial_ratio=1.0,
                  initial_warmup=0, 
-                 final_warmup=0, 
-                 deltaT=1, 
+                 final_warmup=0,
+                 deltaT=10, 
                  sparse_fine_tune=0,
                  masking_value=0.0, 
                  non_mask_name=None, 
                  non_prior_name=None):
         
-        self.mask = None
-                     
+        self.final_ratio_mask = None
         self.train_size = train_size
         self.max_train_steps = max_train_steps
         self.masking_value = masking_value
@@ -255,7 +254,7 @@ class BReg(Algorithm):
     
     def add_prior_grad(self, model, train_step_index):
         if train_step_index > self.cubic_prune_end:
-            return -1, -1
+            return -1, -1, -1, -1
         # Add prior gradients to the model during the gradual cubic pruning stage
         c1, c2, prior_threshold, sigma0, sigma1, lambda_mix = self.calculate_prior_grad_components(train_step_index)
         with torch.no_grad():
@@ -296,8 +295,8 @@ class BReg(Algorithm):
                 mask_threshold = None
         elif train_step_index == self.cubic_prune_end:
             ratio = self.final_ratio
-            mask_threshold, final_mask = self.mask_with_threshold(model, ratio)
-            self.mask = final_mask
+            mask_threshold, final_ratio_mask = self.mask_with_threshold(model, ratio)
+            self.final_ratio_mask = final_ratio_mask
         else:
             ratio = self.final_ratio
             mask_threshold = 0.0
@@ -333,7 +332,7 @@ class BReg(Algorithm):
         with torch.no_grad():
             for n, p in model.named_parameters():
                 if self.whether_mask_para(n):
-                    p.data.masked_fill_(self.mask[n], 0.0)
+                    p.data.masked_fill_(self.final_ratio_mask[n], 0.0)
 
     def calculate_relative_sparsity(self, model):
         n_params = 0

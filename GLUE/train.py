@@ -276,38 +276,48 @@ def parse_args():
     )
 
     # cubic pruning scheduler
-    parser.add_argument("--final_ratio",        type=float, default=0.2, help="The final ratio of the remaining weights.")
-    parser.add_argument("--initial_ratio",      type=float, default=1,   help="The initial ratio of the remaining weights.")
+    parser.add_argument("--final_ratio",        type=float,            default=0.1, help="The final ratio of the remaining weights.")
+    parser.add_argument("--initial_ratio",      type=float,            default=1,   help="The initial ratio of the remaining weights.")
     parser.add_argument("--initial_warmup",     type=my_custom_type,   default=1,   help="The number of training batches/steps for initial warmup.")
     parser.add_argument("--final_warmup",       type=my_custom_type,   default=0,   help="The number of training batches/steps for final warmup.")
     parser.add_argument("--deltaT",             type=my_custom_type,   default=10,  help="The interval to mask weights.")
     parser.add_argument("--sparse_fine_tune",   type=my_custom_type,   default=0,   help="The number of training batches/steps for sparse fine-tuning.")
 
-    # BReg and PMGP
-    parser.add_argument("--sigma0",             type=float, default=1e-15, help="The smaller variance of the Mixture Gaussian prior.")
-    parser.add_argument("--alpha_i_sigma0",     type=float, default=1.0,   help="The initial factor value of the sigma0.")
-    parser.add_argument("--alpha_f_sigma0",     type=float, default=1.0,  help="The final factor value of the sigma0.")
+    # BReg
+    parser.add_argument("--sigma0",             type=float,            default=1e-13, help="The smaller variance of the Mixture Gaussian prior.")
+    parser.add_argument("--alpha_i_sigma0",     type=float,            default=1.0,   help="The initial factor value of the sigma0.")
+    parser.add_argument("--alpha_f_sigma0",     type=float,            default=1.0,   help="The final factor value of the sigma0.")
 
-    parser.add_argument("--sigma1",             type=float, default=0.1,   help="The larger variance of the Mixture Gaussian prior.")
-    parser.add_argument("--alpha_i_sigma1",     type=float, default=1.0,   help="The initial factor value of the sigma1.")
-    parser.add_argument("--alpha_f_sigma1",     type=float, default=1.0,   help="The final factor value of the sigma1.")
+    parser.add_argument("--sigma1",             type=float,            default=0.05,   help="The larger variance of the Mixture Gaussian prior.")
+    parser.add_argument("--alpha_i_sigma1",     type=float,            default=1.0,   help="The initial factor value of the sigma1.")
+    parser.add_argument("--alpha_f_sigma1",     type=float,            default=1.0,   help="The final factor value of the sigma1.")
     
-    parser.add_argument("--lambda_mix",         type=float, default=1e-3,  help="The mixing coefficient of the Mixture Gaussian prior.")
-    parser.add_argument("--alpha_i_lambda",     type=float, default=1.0,   help="The initial factor value of the lambda_mix.")
-    parser.add_argument("--alpha_f_lambda",     type=float, default=0.01,  help="The final factor value of the lambda_mix.")
+    parser.add_argument("--lambda_mix",         type=float,            default=1e-3,  help="The mixing coefficient of the Mixture Gaussian prior.")
+    parser.add_argument("--alpha_i_lambda",     type=float,            default=1.0,   help="The initial factor value of the lambda_mix.")
+    parser.add_argument("--alpha_f_lambda",     type=float,            default=0.01,  help="The final factor value of the lambda_mix.")
 
     parser.add_argument("--anneal_start",       type=my_custom_type,   default=None,  help="The number of traing batches/steps for lambda_mix annealing to start.")
     parser.add_argument("--anneal_end",         type=my_custom_type,   default=None,  help="The number of traing batches/steps for lambda_mix annealing to end.")
-    parser.add_argument("--masking_value",      type=float,            default=0.0,   help="The masking value for the pruned weights.")
+
+    parser.add_argument("--masking_value",      type=float,            default=0.0,   help="The filling value of the masked weights.")
+
     parser.add_argument('--non_prior_name',
                         type=str,
                         default=None,
                         nargs='+',
-                        help="The names of the modules that should not be penalized by the prior.")
+                        help="The names of the modules that should not be penalized by the prior, if any. We will match the names using regex.")
 
     # PLATON
-    parser.add_argument("--beta1", type=float, default=0.85, help="The beta1 of PLATON pruner.")
-    parser.add_argument("--beta2", type=float, default=0.85, help="The beta2 of PLATON pruner.")
+    parser.add_argument(
+        "--beta1", 
+        type=float, 
+        default=0.85, 
+        help="The beta1 of PLATON pruner.")
+    parser.add_argument(
+        "--beta2", 
+        type=float, 
+        default=0.85, 
+        help="The beta2 of PLATON pruner.")
 
     # pruning algorithm selection
     parser.add_argument(
