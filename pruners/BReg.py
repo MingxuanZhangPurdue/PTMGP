@@ -110,16 +110,41 @@ def _convert_timestr_to_int(time, max_train_steps, train_dataloader_len):
     else:
         raise ValueError("time must be either int or str.")
 
+def _linear_scheduler(step, start, end, start_value, end_value):
+    if step <= start:
+        return start_value
+    elif step >= end:
+        return end_value
+    else:
+        if start_value == end_value:
+            return start_value
+        frac_of_total = min(1.0, (step - start) / (end - start))
+        current_factor = start_value + frac_of_total * (end_value - start_value)
+        return current_factor
+
 class BReg(Algorithm):
     def __init__(self,
-                 train_size, max_train_steps,
-                 sigma0=1e-15, sigma1=0.1, lambda_mix=1e-3,
-                 alpha_i_lambda=1.0, alpha_f_lambda=0.01,
-                 anneal_start_lambda=None, anneal_end_lambda=None,
-                 final_ratio=1, initial_ratio=1,
-                 initial_warmup=0, final_warmup=0, deltaT=1,
-                 masking_value=0.0,
-                 non_mask_name=None,
+                 train_size,
+                 max_train_steps,
+                 sigma0=1e-15,
+                 alpha_i_sigma0=1.0, 
+                 alpha_f_sigma0=1.0,
+                 sigma1=0.1,
+                 alpha_i_sigma1=1.0, 
+                 alpha_f_sigma1=1.0,
+                 lambda_mix=1e-3,
+                 alpha_i_lambda=1.0, 
+                 alpha_f_lambda=0.01,
+                 anneal_start=None, 
+                 anneal_end=None,
+                 final_ratio=0.2, 
+                 initial_ratio=1.0,
+                 initial_warmup=0, 
+                 final_warmup=0, 
+                 deltaT=1, 
+                 sparse_fine_tune=0,
+                 masking_value=0.0, 
+                 non_mask_name=None, 
                  non_prior_name=None):
         
         self.mask = None
@@ -131,7 +156,13 @@ class BReg(Algorithm):
         self.non_prior_name_pattern = re.compile("|".join(non_prior_name), re.IGNORECASE) if non_prior_name is not None else None
 
         self.sigma0 = sigma0
+        self.alpha_i_sigma0 = alpha_i_sigma0
+        self.alpha_f_sigma0 = alpha_f_sigma0
+
         self.sigma1 = sigma1
+        self.alpha_i_sigma1 = alpha_i_sigma1
+        self.alpha_f_sigma1 = alpha_f_sigma1
+
         self.lambda_mix = lambda_mix
         self.alpha_i_lambda = alpha_i_lambda
         self.alpha_f_lambda = alpha_f_lambda
@@ -141,23 +172,27 @@ class BReg(Algorithm):
         self.initial_warmup = initial_warmup
         self.final_warmup = final_warmup
         self.deltaT = deltaT
+
+        self.sparse_fine_tune = sparse_fine_tune
         
         cubic_prune_start = initial_warmup
-        cubic_prune_end = max_train_steps - final_warmup
+        cubic_prune_cool_down_start = max_train_steps - sparse_fine_tune - final_warmup
+        cubic_prune_end = max_train_steps - sparse_fine_tune
 
-        self.anneal_start_lambda = anneal_start_lambda if anneal_start_lambda is not None else cubic_prune_start
-        self.anneal_end_lambda = anneal_end_lambda if anneal_end_lambda is not None else cubic_prune_end
-        self.lambda_mix_scheduler_steps = self.anneal_end_lambda - self.anneal_start_lambda
+        self.anneal_start = anneal_start if anneal_start is not None else cubic_prune_start
+        self.anneal_end = anneal_end if anneal_end is not None else cubic_prune_cool_down_start
 
-        if not (cubic_prune_start <= cubic_prune_end <= max_train_steps):
+        if not (cubic_prune_start < cubic_prune_cool_down_start <= cubic_prune_end <= max_train_steps):
             print ("cubic_prune_start:", cubic_prune_start)
+            print ("cubic_prune_cool_down:", cubic_prune_cool_down_start)
             print ("cubic_prune_end:", cubic_prune_end)
             print ("max_train_steps:", max_train_steps)
-            raise ValueError("cubic_prune_start <= cubic_prune_end <= max_train_steps is not satisfied.")
+            raise ValueError("cubic_prune_start < cubic_prune_cool_down_start <= scubic_prune_end <= max_train_steps must be satisfied, but got False")
     
-        self.ratio_scheduler_steps = cubic_prune_end - cubic_prune_start
+        self.ratio_scheduler_steps = cubic_prune_cool_down_start - cubic_prune_start
         self.cubic_prune_start = cubic_prune_start
         self.cubic_prune_end = cubic_prune_end
+        self.cubic_prune_cool_down = cubic_prune_cool_down_start
 
 
     @classmethod
@@ -165,28 +200,38 @@ class BReg(Algorithm):
         initial_warmup = _convert_timestr_to_int(args.initial_warmup, max_train_steps, train_dataloader_len)
         final_warmup = _convert_timestr_to_int(args.final_warmup, max_train_steps, train_dataloader_len)
         deltaT = _convert_timestr_to_int(args.deltaT, max_train_steps, train_dataloader_len)
+        sparse_fine_tune = _convert_timestr_to_int(args.sparse_fine_tune, max_train_steps, train_dataloader_len)
         anneal_start_lambda = _convert_timestr_to_int(args.anneal_start_lambda, max_train_steps, train_dataloader_len) if args.anneal_start_lambda is not None else None
         anneal_end_lambda = _convert_timestr_to_int(args.anneal_end_lambda, max_train_steps, train_dataloader_len) if args.anneal_end_lambda is not None else None
-        return self(train_size, max_train_steps,
-                    sigma0=args.sigma0, sigma1=args.sigma1, lambda_mix=args.lambda_mix,
-                    alpha_i_lambda=args.alpha_i_lambda, alpha_f_lambda=args.alpha_f_lambda,
-                    anneal_start_lambda=anneal_start_lambda, anneal_end_lambda=anneal_end_lambda,
-                    final_ratio=args.final_ratio, initial_ratio=args.initial_ratio,
-                    initial_warmup=initial_warmup, final_warmup=final_warmup, deltaT=deltaT,
+        return self(train_size, 
+                    max_train_steps,
+                    sigma0=args.sigma0, 
+                    alpha_i_sigma0=args.alpha_i_sigma0,
+                    alpha_f_sigma0=args.alpha_f_sigma0,
+                    sigma1=args.sigma1,
+                    alpha_i_sigma1=args.alpha_i_sigma1,
+                    alpha_f_sigma1=args.alpha_f_sigma1,
+                    lambda_mix=args.lambda_mix,
+                    alpha_i_lambda=args.alpha_i_lambda, 
+                    alpha_f_lambda=args.alpha_f_lambda,
+                    anneal_start_lambda=anneal_start_lambda, 
+                    anneal_end_lambda=anneal_end_lambda,
+                    final_ratio=args.final_ratio, 
+                    initial_ratio=args.initial_ratio,
+                    initial_warmup=initial_warmup, 
+                    final_warmup=final_warmup, 
+                    deltaT=deltaT,
+                    sparse_fine_tune=sparse_fine_tune,
                     masking_value=args.masking_value, 
-                    non_mask_name=args.non_mask_name, non_prior_name=args.non_prior_name
+                    non_mask_name=args.non_mask_name, 
+                    non_prior_name=args.non_prior_name
                     )
-
-    def lambda_linear_scheduler(self, train_step_index):
-        if train_step_index <= self.anneal_start_lambda:
-            return self.alpha_i_lambda*self.lambda_mix
-        else:
-            if self.lambda_mix_scheduler_steps == 0 or self.alpha_i_lambda == self.alpha_f_lambda:
-                return self.alpha_f_lambda*self.lambda_mix
-            else:
-                frac_of_total = min(1.0, (train_step_index - self.anneal_start_lambda) / (self.lambda_mix_scheduler_steps))
-                current_factor = self.alpha_i_lambda + frac_of_total * (self.alpha_f_lambda - self.alpha_i_lambda)
-                return current_factor*self.lambda_mix
+    
+    def linear_prior_scheduler(self, train_step_index):
+        lambda_mix_factor = _linear_scheduler(train_step_index, self.anneal_start, self.anneal_end, self.alpha_i_lambda, self.alpha_f_lambda)
+        sigma0_factor = _linear_scheduler(train_step_index, self.anneal_start, self.anneal_end, self.alpha_i_sigma0, self.alpha_f_sigma0)
+        sigma1_factor = _linear_scheduler(train_step_index, self.anneal_start, self.anneal_end, self.alpha_i_sigma1, self.alpha_f_sigma1)
+        return sigma0_factor*self.sigma0, sigma1_factor*self.sigma1, lambda_mix_factor*self.lambda_mix
 
     def whether_mask_para(self, n):
         if self.non_mask_name_pattern == None:
@@ -200,30 +245,26 @@ class BReg(Algorithm):
         else:
             return not bool(re.search(self.non_prior_name_pattern, n))
 
-    def calculate_prior_threshold(self, train_step_index):
-        lambda_mix = self.lambda_linear_scheduler(train_step_index)
-        sigma_1 = self.sigma1
-        sigma_0 = self.sigma0
-        c1 = np.log(lambda_mix) - np.log(1 - lambda_mix) + 0.5 * np.log(sigma_0) - 0.5 * np.log(sigma_1)
-        c2 = 0.5 / sigma_0 - 0.5 / sigma_1
-        prior_threshold = np.sqrt(np.log((1 - lambda_mix) / lambda_mix * np.sqrt(sigma_1 / sigma_0)) / (
-                    0.5 / sigma_0 - 0.5 / sigma_1))
-        return c1, c2, prior_threshold, lambda_mix
+    def calculate_prior_grad_components(self, train_step_index):
+        sigma0, sigma1, lambda_mix = self.linear_prior_scheduler(train_step_index)
+        c1 = np.log(lambda_mix) - np.log(1 - lambda_mix) + 0.5 * np.log(sigma0) - 0.5 * np.log(sigma1)
+        c2 = 0.5 / sigma0 - 0.5 / sigma1
+        prior_threshold = np.sqrt(np.log((1 - lambda_mix) / lambda_mix * np.sqrt(sigma1 / sigma0)) / (
+                    0.5 / sigma0 - 0.5 / sigma1))
+        return c1, c2, prior_threshold, sigma0, sigma1, lambda_mix
     
     def add_prior_grad(self, model, train_step_index):
         if train_step_index > self.cubic_prune_end:
             return -1, -1
-        # Add prior gradients to the model during the gradual pruning stage
-        sigma_1 = self.sigma1
-        sigma_0 = self.sigma0
-        c1, c2, prior_threshold, lambda_mix = self.calculate_prior_threshold(train_step_index)
+        # Add prior gradients to the model during the gradual cubic pruning stage
+        c1, c2, prior_threshold, sigma0, sigma1, lambda_mix = self.calculate_prior_grad_components(train_step_index)
         with torch.no_grad():
             for n, p in model.named_parameters():
                 if self.whether_penalize_para(n):
                     temp = p.pow(2).mul(c2).add(c1).exp().add(1).pow(-1)
-                    temp = temp.mul((sigma_0-sigma_1)/(self.train_size*sigma_0*sigma_1)).add((-1)/(self.train_size*sigma_1))
+                    temp = temp.mul((sigma0-sigma1)/(self.train_size*sigma0*sigma1)).add((-1)/(self.train_size*sigma1))
                     p.grad -= p.mul(temp)
-        return prior_threshold, lambda_mix
+        return prior_threshold, sigma0, sigma1, lambda_mix
     
     def mask_with_threshold(self, model, ratio):
         # Calculate the importance score
@@ -270,7 +311,7 @@ class BReg(Algorithm):
         final_ratio = self.final_ratio
         deltaT = self.deltaT
         cubic_prune_start = self.cubic_prune_start
-        cubic_prune_end = self.cubic_prune_end
+        cubic_prune_cool_down_start = self.cubic_prune_cool_down_start
         ratio_scheduler_steps = self.ratio_scheduler_steps
         mask_ind = False
         if train_step_index < cubic_prune_start:
@@ -279,9 +320,9 @@ class BReg(Algorithm):
         elif train_step_index == cubic_prune_start:
             ratio = initial_ratio
             mask_ind = True
-        elif train_step_index >= cubic_prune_end:
+        elif train_step_index >= cubic_prune_cool_down_start:
             ratio = final_ratio
-            mask_ind = True
+            mask_ind = True if train_step_index % deltaT == 0 else False
         else:
             mul_coeff = 1 - (train_step_index - cubic_prune_start) / (ratio_scheduler_steps)
             ratio = final_ratio + (initial_ratio - final_ratio) * (mul_coeff ** 3)
@@ -309,7 +350,9 @@ class BReg(Algorithm):
 
     def apply(self, event, state, logger):
         if event == Event.AFTER_TRAIN_BATCH:
-            prior_threshold, lambda_mix = self.add_prior_grad(state.model, state.timestamp.batch.value)
+            prior_threshold, sigma0, sigma1, lambda_mix = self.add_prior_grad(state.model, state.timestamp.batch.value)
+            logger.log_metrics({"sigma0": float(sigma0)})
+            logger.log_metrics({"sigma1": float(sigma1)})
             logger.log_metrics({"lambda_mix": float(lambda_mix)})
             logger.log_metrics({"prior_threshold": float(prior_threshold)})
         elif event == Event.BATCH_END:
