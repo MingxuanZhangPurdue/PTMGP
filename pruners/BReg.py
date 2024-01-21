@@ -191,7 +191,7 @@ class BReg(Algorithm):
         self.ratio_scheduler_steps = cubic_prune_cool_down_start - cubic_prune_start
         self.cubic_prune_start = cubic_prune_start
         self.cubic_prune_end = cubic_prune_end
-        self.cubic_prune_cool_down = cubic_prune_cool_down_start
+        self.cubic_prune_cool_down_start = cubic_prune_cool_down_start
 
 
     @classmethod
