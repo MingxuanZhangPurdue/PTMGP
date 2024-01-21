@@ -201,8 +201,8 @@ class BReg(Algorithm):
         final_warmup = _convert_timestr_to_int(args.final_warmup, max_train_steps, train_dataloader_len)
         deltaT = _convert_timestr_to_int(args.deltaT, max_train_steps, train_dataloader_len)
         sparse_fine_tune = _convert_timestr_to_int(args.sparse_fine_tune, max_train_steps, train_dataloader_len)
-        anneal_start_lambda = _convert_timestr_to_int(args.anneal_start_lambda, max_train_steps, train_dataloader_len) if args.anneal_start_lambda is not None else None
-        anneal_end_lambda = _convert_timestr_to_int(args.anneal_end_lambda, max_train_steps, train_dataloader_len) if args.anneal_end_lambda is not None else None
+        anneal_start = _convert_timestr_to_int(args.anneal_start, max_train_steps, train_dataloader_len) if args.anneal_start is not None else None
+        anneal_end = _convert_timestr_to_int(args.anneal_end, max_train_steps, train_dataloader_len) if args.anneal_end is not None else None
         return self(train_size, 
                     max_train_steps,
                     sigma0=args.sigma0, 
@@ -214,8 +214,8 @@ class BReg(Algorithm):
                     lambda_mix=args.lambda_mix,
                     alpha_i_lambda=args.alpha_i_lambda, 
                     alpha_f_lambda=args.alpha_f_lambda,
-                    anneal_start_lambda=anneal_start_lambda, 
-                    anneal_end_lambda=anneal_end_lambda,
+                    anneal_start_lambda=anneal_start, 
+                    anneal_end_lambda=anneal_end,
                     final_ratio=args.final_ratio, 
                     initial_ratio=args.initial_ratio,
                     initial_warmup=initial_warmup, 
