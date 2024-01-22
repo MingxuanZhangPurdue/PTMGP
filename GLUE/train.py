@@ -281,6 +281,7 @@ def parse_args():
     parser.add_argument("--initial_warmup",     type=my_custom_type,   default=1,   help="The number of training batches/steps for initial warmup.")
     parser.add_argument("--final_warmup",       type=my_custom_type,   default=0,   help="The number of training batches/steps for final warmup.")
     parser.add_argument("--deltaT",             type=my_custom_type,   default=10,  help="The interval to mask weights.")
+    parser.add_argument("--deltaT_cooldown",    type=my_custom_type,   default=10,  help="The interval to mask weights.")
     parser.add_argument("--sparse_fine_tune",   type=my_custom_type,   default=0,   help="The number of training batches/steps for sparse fine-tuning.")
 
     # BReg

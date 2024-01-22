@@ -141,7 +141,8 @@ class BReg(Algorithm):
                  initial_ratio=1.0,
                  initial_warmup=0, 
                  final_warmup=0,
-                 deltaT=10, 
+                 deltaT=10,
+                 deltaT_cooldown=1,
                  sparse_fine_tune=0,
                  masking_value=0.0, 
                  non_mask_name=None, 
@@ -171,6 +172,7 @@ class BReg(Algorithm):
         self.initial_warmup = initial_warmup
         self.final_warmup = final_warmup
         self.deltaT = deltaT
+        self.deltaT_cooldown = deltaT_cooldown
 
         self.sparse_fine_tune = sparse_fine_tune
         
@@ -199,6 +201,7 @@ class BReg(Algorithm):
         initial_warmup = _convert_timestr_to_int(args.initial_warmup, max_train_steps, train_dataloader_len)
         final_warmup = _convert_timestr_to_int(args.final_warmup, max_train_steps, train_dataloader_len)
         deltaT = _convert_timestr_to_int(args.deltaT, max_train_steps, train_dataloader_len)
+        deltaT_cooldown = _convert_timestr_to_int(args.deltaT_cooldown, max_train_steps, train_dataloader_len)
         sparse_fine_tune = _convert_timestr_to_int(args.sparse_fine_tune, max_train_steps, train_dataloader_len)
         anneal_start = _convert_timestr_to_int(args.anneal_start, max_train_steps, train_dataloader_len) if args.anneal_start is not None else None
         anneal_end = _convert_timestr_to_int(args.anneal_end, max_train_steps, train_dataloader_len) if args.anneal_end is not None else None
@@ -220,6 +223,7 @@ class BReg(Algorithm):
                     initial_warmup=initial_warmup, 
                     final_warmup=final_warmup, 
                     deltaT=deltaT,
+                    deltaT_cooldown=deltaT_cooldown,
                     sparse_fine_tune=sparse_fine_tune,
                     masking_value=args.masking_value, 
                     non_mask_name=args.non_mask_name, 
@@ -309,6 +313,7 @@ class BReg(Algorithm):
         initial_ratio = self.initial_ratio
         final_ratio = self.final_ratio
         deltaT = self.deltaT
+        deltaT_cooldown = self.deltaT_cooldown
         cubic_prune_start = self.cubic_prune_start
         cubic_prune_cool_down_start = self.cubic_prune_cool_down_start
         ratio_scheduler_steps = self.ratio_scheduler_steps
@@ -321,7 +326,7 @@ class BReg(Algorithm):
             mask_ind = True
         elif train_step_index >= cubic_prune_cool_down_start:
             ratio = final_ratio
-            mask_ind = True if train_step_index % deltaT == 0 else False
+            mask_ind = True if train_step_index % deltaT_cooldown == 0 else False
         else:
             mul_coeff = 1 - (train_step_index - cubic_prune_start) / (ratio_scheduler_steps)
             ratio = final_ratio + (initial_ratio - final_ratio) * (mul_coeff ** 3)
