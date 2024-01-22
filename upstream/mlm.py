@@ -21,7 +21,8 @@ from composer.loggers import WandBLogger
 from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler
 from composer.metrics.nlp import LanguageCrossEntropy, MaskedAccuracy
 
-from pruners.PMGP import PMGP_Algorithm
+from pruners.BReg import BReg
+from pruners.utils_composer import LinearWithRewindsScheduler
 from upstream.utils_datasets import get_tokenized_mlm_datasets
 
 MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
@@ -34,8 +35,6 @@ def my_custom_type(value):
     except ValueError:
         # If conversion to int fails, return the value as a string
         return value
-
-
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers model on a Masked Language Modeling task")
@@ -478,7 +477,7 @@ def main():
         callbacks=[LRMonitor(), RuntimeEstimator()],
 
         # algorithms
-        algorithms=[pruner_algorithm, gc],
+        algorithms=[gc, pruner_algorithm],
 
         # checkpointing
         run_name=args.run_name,

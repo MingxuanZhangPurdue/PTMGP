@@ -2,6 +2,7 @@ import torch
 import re
 import numpy as np
 from typing import Union
+from composer.functional import apply_gradient_clipping
 from composer.core import Algorithm, Event
 from pruners.utils_composer import _convert_timestr_to_int
 
@@ -21,6 +22,7 @@ class BReg(Algorithm):
     def __init__(self,
                  train_size,
                  max_train_steps,
+                 clipping_threshold=1.0,
                  sigma0=1e-13,
                  alpha_i_sigma0=1.0, 
                  alpha_f_sigma0=1.0,
@@ -43,6 +45,7 @@ class BReg(Algorithm):
                  non_mask_name=None, 
                  non_prior_name=None):
         
+        self.clipping_threshold = clipping_threshold
         self.final_ratio_mask = None
         self.train_size = train_size
         self.max_train_steps = max_train_steps
@@ -102,6 +105,7 @@ class BReg(Algorithm):
         anneal_end = _convert_timestr_to_int(args.anneal_end, max_train_steps, train_dataloader_len) if args.anneal_end is not None else None
         return self(train_size, 
                     max_train_steps,
+                    clipping_threshold=args.clipping_threshold,
                     sigma0=args.sigma0, 
                     alpha_i_sigma0=args.alpha_i_sigma0,
                     alpha_f_sigma0=args.alpha_f_sigma0,
@@ -151,6 +155,15 @@ class BReg(Algorithm):
                     0.5 / sigma0 - 0.5 / sigma1))
         return c1, c2, prior_threshold, sigma0, sigma1, lambda_mix
     
+    def gradient_clipping(self, model, train_step_index):
+        # Clip the norm of the gradients
+        # We do not clip the gradients, when the prior is added to the model, i.e., the gradual cubic pruning stage.
+        if train_step_index < self.cubic_prune_start or train_step_index > self.cubic_prune_end:
+            apply_gradient_clipping(
+                model.parameters(),
+                clipping_type='norm',
+                clipping_threshold=self.clipping_threshold)
+            
     def add_prior_grad(self, model, train_step_index):
         if train_step_index > self.cubic_prune_end:
             return -1, -1, -1, -1
@@ -258,6 +271,7 @@ class BReg(Algorithm):
             self.print_pruning_modules(state.model)
         elif event == Event.AFTER_TRAIN_BATCH:
             prior_threshold, sigma0, sigma1, lambda_mix = self.add_prior_grad(state.model, state.timestamp.batch.value)
+            self.gradient_clipping(state.model, state.timestamp.batch.value)
             logger.log_metrics({"sigma0": float(sigma0)})
             logger.log_metrics({"sigma1": float(sigma1)})
             logger.log_metrics({"lambda_mix": float(lambda_mix)})

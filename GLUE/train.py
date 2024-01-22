@@ -172,10 +172,10 @@ def parse_args():
 
     # training setups
     parser.add_argument(
-        "--max_grad_norm",
+        "--clipping_threshold",
         type=float,
         default=1.0,
-        help="Max gradient norm.",
+        help="Gradient clipping threshold."
     )
     parser.add_argument(
         "--precision",
@@ -529,7 +529,7 @@ def main():
         
 
     # gradient clipping following oBERT and PLATON
-    gc = GradientClipping(clipping_type='norm', clipping_threshold=args.max_grad_norm)
+    gc = GradientClipping(clipping_type='norm', clipping_threshold=args.clipping_threshold)
 
     # initialize the trainer
     trainer = Trainer(
@@ -553,8 +553,8 @@ def main():
         # callbacks
         callbacks=[LRMonitor(), RuntimeEstimator()],
 
-        # algorithms
-        algorithms=[gc, pruner_algorithm],
+        # algorithms. Gradient clipping is implemented inside the BReg pruner
+        algorithms=[pruner_algorithm] if args.pruner == "BReg" else [gc, pruner_algorithm],
 
         # checkpointing
         run_name=args.run_name,
