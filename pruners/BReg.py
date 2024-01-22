@@ -155,14 +155,16 @@ class BReg(Algorithm):
                     0.5 / sigma0 - 0.5 / sigma1))
         return c1, c2, prior_threshold, sigma0, sigma1, lambda_mix
     
-    def gradient_clipping(self, model, train_step_index):
+    def gradient_clipping(self, model, train_step_index, fsdp_enabled=False):
         # Clip the norm of the gradients
         # We do not clip the gradients, when the prior is added to the model, i.e., the gradual cubic pruning stage.
         if train_step_index < self.cubic_prune_start or train_step_index > self.cubic_prune_end:
             apply_gradient_clipping(
                 model.parameters(),
                 clipping_type='norm',
-                clipping_threshold=self.clipping_threshold)
+                clipping_threshold=self.clipping_threshold,
+                fsdp_enabled=fsdp_enabled
+            )
             
     def add_prior_grad(self, model, train_step_index):
         if train_step_index > self.cubic_prune_end:
@@ -271,7 +273,7 @@ class BReg(Algorithm):
             self.print_pruning_modules(state.model)
         elif event == Event.AFTER_TRAIN_BATCH:
             prior_threshold, sigma0, sigma1, lambda_mix = self.add_prior_grad(state.model, state.timestamp.batch.value)
-            self.gradient_clipping(state.model, state.timestamp.batch.value)
+            self.gradient_clipping(state.model, state.timestamp.batch.value, state.fsdp_enabled)
             logger.log_metrics({"sigma0": float(sigma0)})
             logger.log_metrics({"sigma1": float(sigma1)})
             logger.log_metrics({"lambda_mix": float(lambda_mix)})
