@@ -1,13 +1,17 @@
 import torch
 import re
 from composer.core import Algorithm, Event
+from pruners.utils_composer import _convert_timestr_to_int
 
-class PLATON_Algorithm(Algorithm):
+class PLATON(Algorithm):
     def __init__(self, 
                  max_train_steps, 
-                 beta1=0.85, beta2=0.85,
-                 initial_ratio=1, final_ratio=0.2,
-                 initial_warmup=1, final_warmup=1, deltaT=10,
+                 beta1=0.85, 
+                 beta2=0.85,
+                 initial_ratio=1, 
+                 final_ratio=0.2,
+                 initial_warmup=1, 
+                 final_warmup=1, deltaT=10,
                  non_mask_name=None):
 
         self.ipt = {}
@@ -30,18 +34,30 @@ class PLATON_Algorithm(Algorithm):
         cubic_prune_start = initial_warmup
         cubic_prune_end = max_train_steps - final_warmup
 
+        if not (cubic_prune_start < cubic_prune_end <= max_train_steps):
+            print ("cubic_prune_start:", cubic_prune_start)
+            print ("cubic_prune_end:", cubic_prune_end)
+            print ("max_train_steps:", max_train_steps)
+            raise ValueError("cubic_prune_start < cubic_prune_end <= max_train_steps must be satisfied, but got False")
+
         self.cubic_prune_start = cubic_prune_start
         self.cubic_prune_end = cubic_prune_end
         self.ratio_scheduler_steps = cubic_prune_end - cubic_prune_start
         
     @classmethod
-    def from_args(self, max_train_steps, args):
+    def from_args(self, max_train_steps, train_dataloader_len, args):
+        initial_warmup = _convert_timestr_to_int(args.initial_warmup, max_train_steps, train_dataloader_len)
+        final_warmup = _convert_timestr_to_int(args.final_warmup, max_train_steps, train_dataloader_len)
+        deltaT = _convert_timestr_to_int(args.deltaT, max_train_steps, train_dataloader_len)
         return self(
             max_train_steps=max_train_steps, 
-            beta1=args.beta1, beta2=args.beta2,
-            initial_ratio=args.initial_ratio, final_ratio=args.final_ratio,
-            initial_warmup=args.initial_warmup, final_warmup=args.final_warmup,
-            deltaT=args.deltaT,
+            beta1=args.beta1, 
+            beta2=args.beta2,
+            initial_ratio=args.initial_ratio, 
+            final_ratio=args.final_ratio,
+            initial_warmup=initial_warmup, 
+            final_warmup=final_warmup,
+            deltaT=deltaT,
             non_mask_name=args.non_mask_name
             )
 
@@ -122,7 +138,6 @@ class PLATON_Algorithm(Algorithm):
                     p.masked_fill_(is_dict[n] < mask_threshold, 0.0)
         return mask_threshold
 
-
     def update_and_pruning(self, model, train_step_index):
         # Update importance score after optimizer stepping
         self.update_ipt_with_local_window(model, train_step_index)
@@ -146,11 +161,19 @@ class PLATON_Algorithm(Algorithm):
                     n_masked_params += p.eq(0.0).sum().item()
         return n_masked_params/n_params
 
+    def print_pruning_modules(self, model):
+        print ("list of model modules to be pruned:")
+        for n, _ in model.named_parameters():
+            if self.whether_mask_para(n):
+                print (n)
+
     def match(self, event, state):
-        return event in [Event.BATCH_END, Event.FIT_END]
+        return event in [Event.FIT_START, Event.BATCH_END, Event.FIT_END]
 
     def apply(self, event, state, logger):
-        if event == Event.BATCH_END:
+        if event == Event.FIT_START:
+            self.print_pruning_modules(state.model)
+        elif event == Event.BATCH_END:
             ratio, mask_threshold = self.update_and_pruning(state.model, state.timestamp.batch.value)
             logger.log_metrics({"remaining_ratio": float(ratio)})
             if mask_threshold is None:

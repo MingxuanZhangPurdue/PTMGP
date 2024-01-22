@@ -26,9 +26,9 @@ from composer.callbacks import LRMonitor, RuntimeEstimator
 from composer.loggers import WandBLogger
 from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler, CosineAnnealingWarmRestartsScheduler
 
-from pruners.PMGP import PMGP_Algorithm
-from pruners.PLATON import PLATON_Algorithm
-from pruners.BReg import BReg, LinearWithRewindsScheduler
+from pruners.PLATON import PLATON
+from pruners.BReg import BReg
+from pruners.utils_composer import LinearWithRewindsScheduler
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -331,9 +331,9 @@ def parse_args():
     parser.add_argument(
         "--pruner", 
         type=str, 
-        default="PMGP", 
+        default="BReg", 
         help="The pruner to use.", 
-        choices=["PMGP", "PLATON", "BReg"]
+        choices=["PLATON", "BReg"]
     )
 
     args = parser.parse_args()
@@ -513,12 +513,10 @@ def main():
     else:
         raise ValueError(f"Unsupported time unit: {train_time.unit}")
     
-    if args.pruner == "PMGP":
-        pruner_algorithm = PMGP_Algorithm.from_args(train_size, max_train_steps, len(train_dataloader), args)
-    elif args.pruner == "PLATON":
-        pruner_algorithm = PLATON_Algorithm.from_args(max_train_steps, args)
-    elif args.pruner == "BReg":
+    if args.pruner == "BReg":
         pruner_algorithm = BReg.from_args(train_size, max_train_steps, len(train_dataloader), args)
+    elif args.pruner == "PLATON":
+        pruner_algorithm = PLATON.from_args(max_train_steps, len(train_dataloader), args)
     else:
         raise ValueError(f"Unsupported pruner: {args.pruner}")
         
