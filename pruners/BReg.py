@@ -157,7 +157,7 @@ class BReg(Algorithm):
     
     def gradient_clipping(self, model, train_step_index, fsdp_enabled=False):
         # Clip the norm of the gradients
-        # We do not clip the gradients, when the prior is added to the model, i.e., the gradual cubic pruning stage.
+        # We do not clip the gradients, when the prior gradients are added to the model, i.e., the gradual cubic pruning stage.
         if train_step_index < self.cubic_prune_start or train_step_index > self.cubic_prune_end:
             apply_gradient_clipping(
                 model,
