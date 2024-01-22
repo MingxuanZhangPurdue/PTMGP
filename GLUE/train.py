@@ -528,7 +528,7 @@ def main():
         raise ValueError(f"Unsupported pruner: {args.pruner}")
         
 
-    # gradient clipping following oBERT
+    # gradient clipping following oBERT and PLATON
     gc = GradientClipping(clipping_type='norm', clipping_threshold=args.max_grad_norm)
 
     # initialize the trainer
