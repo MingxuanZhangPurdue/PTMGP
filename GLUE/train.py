@@ -22,6 +22,7 @@ from composer.core import Evaluator
 from composer import Time, TimeUnit
 from composer.models.huggingface import HuggingFaceModel
 from composer import Trainer
+from composer.algorithms import GradientClipping
 from composer.callbacks import LRMonitor, RuntimeEstimator
 from composer.loggers import WandBLogger
 from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler, CosineAnnealingWarmRestartsScheduler
@@ -170,6 +171,12 @@ def parse_args():
     )
 
     # training setups
+    parser.add_argument(
+        "--max_grad_norm",
+        type=float,
+        default=1.0,
+        help="Max gradient norm.",
+    )
     parser.add_argument(
         "--precision",
         type=str,
@@ -521,6 +528,9 @@ def main():
         raise ValueError(f"Unsupported pruner: {args.pruner}")
         
 
+    # gradient clipping following oBERT
+    gc = GradientClipping(clipping_type='norm', clipping_threshold=args.max_grad_norm)
+
     # initialize the trainer
     trainer = Trainer(
         # training
@@ -544,7 +554,7 @@ def main():
         callbacks=[LRMonitor(), RuntimeEstimator()],
 
         # algorithms
-        algorithms=[pruner_algorithm],
+        algorithms=[gc, pruner_algorithm],
 
         # checkpointing
         run_name=args.run_name,
