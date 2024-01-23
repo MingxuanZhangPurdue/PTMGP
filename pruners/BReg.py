@@ -166,16 +166,16 @@ class BReg(Algorithm):
     
     def gradient_clipping(self, model, train_step_index):
         clipping_threshold_coef = 1.0
-        if train_step_index < self.cubic_prune_start:
+        #if train_step_index < self.cubic_prune_start:
+        #    grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=self.clipping_threshold).item()
+        #    self.exp_avg_gn_no_prior = self.beta_gn_no_prior * self.exp_avg_gn_no_prior + (1 - self.beta_gn_no_prior) * grad_norm
+        if train_step_index > self.cubic_prune_end:
             grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=self.clipping_threshold).item()
-            self.exp_avg_gn_no_prior = self.beta_gn_no_prior * self.exp_avg_gn_no_prior + (1 - self.beta_gn_no_prior) * grad_norm
-        elif train_step_index > self.cubic_prune_end:
-            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=self.clipping_threshold).item()
-        else:
-            clipping_threshold_coef = self.exp_avg_gn_prior/self.exp_avg_gn_no_prior if self.exp_avg_gn_prior > 0.0 else 1.0
-            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=self.clipping_threshold*clipping_threshold_coef).item()
-            self.exp_avg_gn_prior = self.beta_gn_prior * self.exp_avg_gn_prior + (1 - self.beta_gn_prior) * grad_norm
-        return grad_norm, clipping_threshold_coef
+        #else:
+        #    clipping_threshold_coef = self.exp_avg_gn_prior/self.exp_avg_gn_no_prior if self.exp_avg_gn_prior > 0.0 else 1.0
+        #    grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=self.clipping_threshold*clipping_threshold_coef).item()
+        #    self.exp_avg_gn_prior = self.beta_gn_prior * self.exp_avg_gn_prior + (1 - self.beta_gn_prior) * grad_norm
+        return grad_norm#, clipping_threshold_coef
             
     def add_prior_grad(self, model, train_step_index):
         if train_step_index > self.cubic_prune_end:
