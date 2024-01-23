@@ -298,9 +298,12 @@ def parse_args():
     parser.add_argument("--sparse_fine_tune",   type=my_custom_type,   default=0,     help="The number of training batches/steps for sparse fine-tuning.")
 
     # BReg
-    #parser.add_argument("--beta_gn_prior",      type=float,            default=0.85,  help="The exponential moving average coefficient of the gradient norm with prior effect.")
-    #parser.add_argument("--beta_gn_no_prior",   type=float,            default=0.85,  help="The exponential moving average coefficient of the gradient norm without prior effect.")
-
+    parser.add_argument(
+        "--weight_decay_sparse_fine_tune", 
+        type=float, 
+        default=0.0,   
+        help="Weight decay to use for sparse fine-tuning."
+    )
     parser.add_argument("--sigma0",             type=float,            default=1e-13, help="The smaller variance of the Mixture Gaussian prior.")
     parser.add_argument("--alpha_i_sigma0",     type=float,            default=1.0,   help="The initial factor value of the sigma0.")
     parser.add_argument("--alpha_f_sigma0",     type=float,            default=1.0,   help="The final factor value of the sigma0.")
@@ -317,7 +320,6 @@ def parse_args():
     parser.add_argument("--anneal_end",         type=my_custom_type,   default=None,  help="The number of traing batches/steps for lambda_mix annealing to end.")
 
     parser.add_argument("--masking_value",      type=float,            default=0.0,   help="The filling value of the masked weights.")
-
     parser.add_argument('--non_prior_name',
                         type=str,
                         default=None,
