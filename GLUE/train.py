@@ -52,6 +52,17 @@ def my_custom_type(value):
         if value == "None":
             return None
         return value
+    
+def my_custom_type2(value):
+    try:
+        # Try to convert the value to an integer
+        return float(value)
+    except ValueError:
+        # If conversion to int fails, return the value as a string
+        if value == "None":
+            return None
+        else:
+            raise ValueError(f"Unsupported value type {value}")
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune and prune a transformers model on a glue task.")
@@ -181,7 +192,7 @@ def parse_args():
     # training setups
     parser.add_argument(
         "--clipping_threshold",
-        type=my_custom_type,
+        type=my_custom_type2,
         default=1.0,
         help="Gradient clipping threshold."
     )
@@ -329,7 +340,7 @@ def parse_args():
     )
     parser.add_argument(
         "--lr_sparse_fine_tune",
-        type=my_custom_type,
+        type=float,
         default=None,
         help="Initial learning rate (after the potential warmup period) to use for sparse fine-tuning, if None, will use the same learning rate specified by --learning_rate."
     )
