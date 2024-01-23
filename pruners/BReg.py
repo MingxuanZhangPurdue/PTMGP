@@ -264,7 +264,13 @@ class BReg(Algorithm):
         weight_decay = self.weight_decay_sparse_fine_tune
         eps = optimizer.param_groups[0]['eps']
         betas = optimizer.param_groups[0]['betas']
-        optimizer = DecoupledAdamW(model.parameters(), lr=lr, weight_decay=weight_decay, eps=eps, betas=betas)
+        optimizer = DecoupledAdamW(
+            model.parameters(), 
+            lr=lr, 
+            weight_decay=weight_decay, 
+            eps=eps, 
+            betas=betas
+        )
         return optimizer
         
     def zero_masked_para_grad(self, model):
