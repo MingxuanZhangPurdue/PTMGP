@@ -108,32 +108,33 @@ class BReg(Algorithm):
         sparse_fine_tune = _convert_timestr_to_int(args.sparse_fine_tune, max_train_steps, train_dataloader_len)
         anneal_start = _convert_timestr_to_int(args.anneal_start, max_train_steps, train_dataloader_len) if args.anneal_start is not None else None
         anneal_end = _convert_timestr_to_int(args.anneal_end, max_train_steps, train_dataloader_len) if args.anneal_end is not None else None
-        return self(train_size, 
-                    max_train_steps,
-                    sigma0=args.sigma0, 
-                    alpha_i_sigma0=args.alpha_i_sigma0,
-                    alpha_f_sigma0=args.alpha_f_sigma0,
-                    sigma1=args.sigma1,
-                    alpha_i_sigma1=args.alpha_i_sigma1,
-                    alpha_f_sigma1=args.alpha_f_sigma1,
-                    lambda_mix=args.lambda_mix,
-                    alpha_i_lambda=args.alpha_i_lambda, 
-                    alpha_f_lambda=args.alpha_f_lambda,
-                    anneal_start=anneal_start, 
-                    anneal_end=anneal_end,
-                    final_ratio=args.final_ratio, 
-                    initial_ratio=args.initial_ratio,
-                    initial_warmup=initial_warmup, 
-                    final_warmup=final_warmup, 
-                    deltaT=deltaT,
-                    deltaT_cooldown=deltaT_cooldown,
-                    sparse_fine_tune=sparse_fine_tune,
-                    masking_value=args.masking_value, 
-                    non_mask_name=args.non_mask_name, 
-                    non_prior_name=args.non_prior_name,
-                    clipping_threshold=args.clipping_threshold,
-                    weight_decay_sparse_fine_tune=args.weight_decay_sparse_fine_tune,
-                    )
+        return self(
+            train_size, 
+            max_train_steps,
+            sigma0=args.sigma0, 
+            alpha_i_sigma0=args.alpha_i_sigma0,
+            alpha_f_sigma0=args.alpha_f_sigma0,
+            sigma1=args.sigma1,
+            alpha_i_sigma1=args.alpha_i_sigma1,
+            alpha_f_sigma1=args.alpha_f_sigma1,
+            lambda_mix=args.lambda_mix,
+            alpha_i_lambda=args.alpha_i_lambda, 
+            alpha_f_lambda=args.alpha_f_lambda,
+            anneal_start=anneal_start, 
+            anneal_end=anneal_end,
+            final_ratio=args.final_ratio, 
+            initial_ratio=args.initial_ratio,
+            initial_warmup=initial_warmup, 
+            final_warmup=final_warmup, 
+            deltaT=deltaT,
+            deltaT_cooldown=deltaT_cooldown,
+            sparse_fine_tune=sparse_fine_tune,
+            masking_value=args.masking_value, 
+            non_mask_name=args.non_mask_name, 
+            non_prior_name=args.non_prior_name,
+            clipping_threshold=args.clipping_threshold,
+            weight_decay_sparse_fine_tune=args.weight_decay_sparse_fine_tune,
+        )
     
     def linear_prior_scheduler(self, train_step_index):
         lambda_mix_factor = _linear_scheduler(train_step_index, self.anneal_start, self.anneal_end, self.alpha_i_lambda, self.alpha_f_lambda)
@@ -161,28 +162,7 @@ class BReg(Algorithm):
                     0.5 / sigma0 - 0.5 / sigma1))
         return c1, c2, prior_threshold, sigma0, sigma1, lambda_mix
     
-    def reinit_optimizer(self, model, optimizer):
-        lr = optimizer.param_groups[0]['lr']
-        weight_decay = self.weight_decay_sparse_fine_tune
-        eps = optimizer.param_groups[0]['eps']
-        betas = optimizer.param_groups[0]['betas']
-        optimizer = DecoupledAdamW(model.parameters(), lr=lr, weight_decay=weight_decay, eps=eps, betas=betas)
-        return optimizer
-        
-    def zero_masked_para_grad(self, model):
-        with torch.no_grad():
-            for n, p in model.named_parameters():
-                if self.whether_mask_para(n):
-                    p.grad.masked_fill_(self.final_ratio_mask[n], 0.0)
-    
-    def gradient_clipping(self, model):
-        self.zero_masked_para_grad(model)
-        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=self.clipping_threshold).item()
-        return grad_norm
-    
     def add_prior_grad(self, model, train_step_index):
-        if train_step_index > self.cubic_prune_end:
-            return -1, -1, -1, -1
         # Add prior gradients to the model during the gradual cubic pruning stage
         c1, c2, prior_threshold, sigma0, sigma1, lambda_mix = self.calculate_prior_grad_components(train_step_index)
         with torch.no_grad():
@@ -278,6 +258,25 @@ class BReg(Algorithm):
         for n, _ in model.named_parameters():
             if self.whether_mask_para(n):
                 print (n)
+    
+    def reinit_optimizer(self, model, optimizer):
+        lr = optimizer.param_groups[0]['lr']
+        weight_decay = self.weight_decay_sparse_fine_tune
+        eps = optimizer.param_groups[0]['eps']
+        betas = optimizer.param_groups[0]['betas']
+        optimizer = DecoupledAdamW(model.parameters(), lr=lr, weight_decay=weight_decay, eps=eps, betas=betas)
+        return optimizer
+        
+    def zero_masked_para_grad(self, model):
+        with torch.no_grad():
+            for n, p in model.named_parameters():
+                if self.whether_mask_para(n):
+                    p.grad.masked_fill_(self.final_ratio_mask[n], 0.0)
+    
+    def gradient_clipping(self, model):
+        self.zero_masked_para_grad(model)
+        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=self.clipping_threshold).item()
+        return grad_norm
 
     def match(self, event, state):
         return event in [Event.FIT_START, Event.AFTER_TRAIN_BATCH, Event.BATCH_END, Event.FIT_END]
@@ -287,15 +286,16 @@ class BReg(Algorithm):
             self.print_pruning_modules(state.model)
         elif event == Event.AFTER_TRAIN_BATCH:
             # add prior gradients to the model during the gradual cubic pruning stage
-            prior_threshold, sigma0, sigma1, lambda_mix = self.add_prior_grad(state.model, state.timestamp.batch.value)
+            if state.timestamp.batch.value <= self.cubic_prune_end:
+                prior_threshold, sigma0, sigma1, lambda_mix = self.add_prior_grad(state.model, state.timestamp.batch.value)
+                logger.log_metrics({"sigma0": float(sigma0)})
+                logger.log_metrics({"sigma1": float(sigma1)})
+                logger.log_metrics({"lambda_mix": float(lambda_mix)})
+                logger.log_metrics({"prior_threshold": float(prior_threshold)})
             # perform gradient clipping during the optional sparse finetuning stage for non-masked parameters
-            if state.timestamp.batch.value > self.cubic_prune_end:
+            else:
                 grad_norm = self.gradient_clipping(state.model, state.timestamp.batch.value)
                 logger.log_metrics({"grad_norm": float(grad_norm)})
-            logger.log_metrics({"sigma0": float(sigma0)})
-            logger.log_metrics({"sigma1": float(sigma1)})
-            logger.log_metrics({"lambda_mix": float(lambda_mix)})
-            logger.log_metrics({"prior_threshold": float(prior_threshold)})
         elif event == Event.BATCH_END:
             ratio, mask_threshold = self.magnitude_pruning(state.model, state.timestamp.batch.value)
             logger.log_metrics({"remaining_ratio": float(ratio)})
