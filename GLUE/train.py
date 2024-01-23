@@ -307,8 +307,6 @@ def parse_args():
     parser.add_argument("--initial_warmup",     type=my_custom_type,   default=1,     help="The number of training batches/steps for initial warmup.")
     parser.add_argument("--final_warmup",       type=my_custom_type,   default=0,     help="The number of training batches/steps for final warmup.")
     parser.add_argument("--deltaT",             type=my_custom_type,   default=10,    help="The interval to mask weights.")
-    parser.add_argument("--deltaT_cooldown",    type=my_custom_type,   default=10,    help="The interval to mask weights.")
-    parser.add_argument("--sparse_fine_tune",   type=my_custom_type,   default=0,     help="The number of training batches/steps for sparse fine-tuning.")
 
     # BReg
     parser.add_argument("--sigma0",             type=float,            default=1e-13, help="The smaller variance of the Mixture Gaussian prior.")
@@ -333,22 +331,12 @@ def parse_args():
                         nargs='+',
                         help="The names of the modules that should not be penalized by the prior, if any. We will match the names using regex.")
     parser.add_argument(
-        "--weight_decay_sparse_fine_tune", 
-        type=float, 
-        default=0.0,   
-        help="Weight decay to use for sparse fine-tuning."
+        '--init_prior_in_cooldown',
+        action='store_true',
+        help="If passed, will use the initial prior setting during the cubic prune cooldown period."
     )
-    parser.add_argument(
-        "--lr_sparse_fine_tune",
-        type=float,
-        default=None,
-        help="Initial learning rate (after the potential warmup period) to use for sparse fine-tuning, if None, will use the same learning rate specified by --learning_rate."
-    )
-    parser.add_argument(
-        "--reinit_optimizer_flag",
-        action="store_true",
-        help="If passed, will reinitialize the optimizer for sparse fine-tuning."
-    )
+    parser.add_argument("--deltaT_cooldown",    type=my_custom_type,   default=10,    help="The interval to mask weights.")
+    parser.add_argument("--sparse_fine_tune",   type=my_custom_type,   default=0,     help="The number of training batches/steps for sparse fine-tuning.")
 
     # PLATON
     parser.add_argument(

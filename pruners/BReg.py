@@ -45,9 +45,12 @@ class BReg(Algorithm):
             non_prior_name=None,
             # Sparse fine-tuning parameters for optional sparse fine-tuning stage
             clipping_threshold=None,
+            # whethter use the inital prior regularization (smaller) during the cool down stage
+            init_prior_in_cooldown=False,
         ):
         
         self.clipping_threshold = clipping_threshold
+        self.init_prior_in_cooldown = init_prior_in_cooldown
 
         self.final_ratio_mask = None
         self.train_size = train_size
@@ -131,12 +134,18 @@ class BReg(Algorithm):
             non_mask_name=args.non_mask_name, 
             non_prior_name=args.non_prior_name,
             clipping_threshold=args.clipping_threshold,
+            init_prior_in_cooldown=args.init_prior_in_cooldown
         )
     
     def linear_prior_scheduler(self, train_step_index):
-        lambda_mix_factor = _linear_scheduler(train_step_index, self.anneal_start, self.anneal_end, self.alpha_i_lambda, self.alpha_f_lambda)
-        sigma0_factor = _linear_scheduler(train_step_index, self.anneal_start, self.anneal_end, self.alpha_i_sigma0, self.alpha_f_sigma0)
-        sigma1_factor = _linear_scheduler(train_step_index, self.anneal_start, self.anneal_end, self.alpha_i_sigma1, self.alpha_f_sigma1)
+        if train_step_index >= self.cubic_prune_cool_down_start and self.init_prior_in_cooldown:
+            lambda_mix_factor = self.alpha_i_lambda
+            sigma0_factor = self.alpha_i_sigma0
+            sigma1_factor = self.alpha_i_sigma1
+        else:
+            lambda_mix_factor = _linear_scheduler(train_step_index, self.anneal_start, self.anneal_end, self.alpha_i_lambda, self.alpha_f_lambda)
+            sigma0_factor = _linear_scheduler(train_step_index, self.anneal_start, self.anneal_end, self.alpha_i_sigma0, self.alpha_f_sigma0)
+            sigma1_factor = _linear_scheduler(train_step_index, self.anneal_start, self.anneal_end, self.alpha_i_sigma1, self.alpha_f_sigma1)
         return sigma0_factor*self.sigma0, sigma1_factor*self.sigma1, lambda_mix_factor*self.lambda_mix
 
     def whether_mask_para(self, n):
