@@ -8,10 +8,11 @@ class PLATON(Algorithm):
                  max_train_steps, 
                  beta1=0.85, 
                  beta2=0.85,
-                 initial_ratio=1, 
-                 final_ratio=0.2,
+                 initial_ratio=1.0, 
+                 final_ratio=0.1,
                  initial_warmup=1, 
-                 final_warmup=1, deltaT=10,
+                 final_warmup=1, 
+                 deltaT=10,
                  non_mask_name=None):
 
         self.ipt = {}

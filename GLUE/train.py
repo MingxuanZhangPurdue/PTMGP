@@ -562,7 +562,7 @@ def main():
         # callbacks
         callbacks=[LRMonitor(), RuntimeEstimator()],
 
-        # algorithms. Gradient clipping is implemented inside the BReg pruner
+        # algorithms. Both PLATON and oBERT use gradient clipping.
         algorithms=[pruner_algorithm] if args.pruner == "BReg" else [gc, pruner_algorithm],
 
         # checkpointing
