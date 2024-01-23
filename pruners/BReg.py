@@ -1,7 +1,6 @@
 import torch
 import re
 import numpy as np
-from collections import defaultdict 
 from composer.core import Algorithm, Event
 from pruners.utils_composer import _convert_timestr_to_int
 
