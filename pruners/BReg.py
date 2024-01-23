@@ -23,8 +23,8 @@ class BReg(Algorithm):
                  train_size,
                  max_train_steps,
                  clipping_threshold=1.0,
-                 beta_gn_prior=0.85,
-                 beta_gn_no_prior=0.85,
+                 #beta_gn_prior=0.85,
+                 #beta_gn_no_prior=0.85,
                  sigma0=1e-13,
                  alpha_i_sigma0=1.0, 
                  alpha_f_sigma0=1.0,
@@ -48,10 +48,10 @@ class BReg(Algorithm):
                  non_prior_name=None):
         
         self.clipping_threshold = clipping_threshold
-        self.exp_avg_gn_prior = 0.0
-        self.exp_avg_gn_no_prior = 0.0
-        self.beta_gn_prior = beta_gn_prior
-        self.beta_gn_no_prior = beta_gn_no_prior
+        #self.exp_avg_gn_prior = 0.0
+        #self.exp_avg_gn_no_prior = 0.0
+        #self.beta_gn_prior = beta_gn_prior
+        #self.beta_gn_no_prior = beta_gn_no_prior
 
         self.final_ratio_mask = None
         self.train_size = train_size
@@ -113,8 +113,8 @@ class BReg(Algorithm):
         return self(train_size, 
                     max_train_steps,
                     clipping_threshold=args.clipping_threshold,
-                    beta_gn_prior=args.beta_gn_prior,
-                    beta_gn_no_prior=args.beta_gn_no_prior,
+                    #beta_gn_prior=args.beta_gn_prior,
+                    #beta_gn_no_prior=args.beta_gn_no_prior,
                     sigma0=args.sigma0, 
                     alpha_i_sigma0=args.alpha_i_sigma0,
                     alpha_f_sigma0=args.alpha_f_sigma0,
@@ -165,17 +165,18 @@ class BReg(Algorithm):
         return c1, c2, prior_threshold, sigma0, sigma1, lambda_mix
     
     def gradient_clipping(self, model, train_step_index):
-        clipping_threshold_coef = 1.0
+        #clipping_threshold_coef = 1.0
         #if train_step_index < self.cubic_prune_start:
         #    grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=self.clipping_threshold).item()
         #    self.exp_avg_gn_no_prior = self.beta_gn_no_prior * self.exp_avg_gn_no_prior + (1 - self.beta_gn_no_prior) * grad_norm
         if train_step_index > self.cubic_prune_end:
             grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=self.clipping_threshold).item()
+            return grad_norm
         #else:
         #    clipping_threshold_coef = self.exp_avg_gn_prior/self.exp_avg_gn_no_prior if self.exp_avg_gn_prior > 0.0 else 1.0
         #    grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=self.clipping_threshold*clipping_threshold_coef).item()
         #    self.exp_avg_gn_prior = self.beta_gn_prior * self.exp_avg_gn_prior + (1 - self.beta_gn_prior) * grad_norm
-        return grad_norm#, clipping_threshold_coef
+        return None#, clipping_threshold_coef
             
     def add_prior_grad(self, model, train_step_index):
         if train_step_index > self.cubic_prune_end:
@@ -284,13 +285,13 @@ class BReg(Algorithm):
             self.print_pruning_modules(state.model)
         elif event == Event.AFTER_TRAIN_BATCH:
             prior_threshold, sigma0, sigma1, lambda_mix = self.add_prior_grad(state.model, state.timestamp.batch.value)
-            grad_norm, clipping_threshold_coef = self.gradient_clipping(state.model, state.timestamp.batch.value)
+            grad_norm = self.gradient_clipping(state.model, state.timestamp.batch.value)
             logger.log_metrics({"sigma0": float(sigma0)})
             logger.log_metrics({"sigma1": float(sigma1)})
             logger.log_metrics({"lambda_mix": float(lambda_mix)})
             logger.log_metrics({"prior_threshold": float(prior_threshold)})
-            logger.log_metrics({"clipping_threshold_coef": float(clipping_threshold_coef)})
-            logger.log_metrics({"grad_norm": float(grad_norm)})
+            #logger.log_metrics({"clipping_threshold_coef": float(clipping_threshold_coef)})
+            logger.log_metrics({"grad_norm": float(grad_norm) if grad_norm is not None else -1})
         elif event == Event.BATCH_END:
             ratio, mask_threshold = self.magnitude_pruning(state.model, state.timestamp.batch.value)
             logger.log_metrics({"remaining_ratio": float(ratio)})
