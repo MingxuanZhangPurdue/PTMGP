@@ -292,8 +292,11 @@ class BReg(Algorithm):
         if event == Event.FIT_START:
             self.print_pruning_modules(state.model)
         elif event == Event.AFTER_TRAIN_BATCH:
+            # add prior gradients to the model during the gradual cubic pruning stage
             prior_threshold, sigma0, sigma1, lambda_mix = self.add_prior_grad(state.model, state.timestamp.batch.value)
+            # clear the gradient of masked parameters during the sparse fine-tuning stage
             self.clear_masked_para_grad(state.model, state.timestamp.batch.value)
+            # perform gradient clipping during the gradual cubic pruning stage for non-masked parameters
             grad_norm = self.gradient_clipping(state.model, state.timestamp.batch.value)
             logger.log_metrics({"sigma0": float(sigma0)})
             logger.log_metrics({"sigma1": float(sigma1)})
