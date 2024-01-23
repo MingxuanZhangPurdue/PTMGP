@@ -16,66 +16,6 @@ def _linear_scheduler(step, start, end, start_value, end_value):
         frac_of_total = min(1.0, (step - start) / (end - start))
         current_factor = start_value + frac_of_total * (end_value - start_value)
         return current_factor
-    
-class Sparse_Finetune(Algorithm):
-    def __init__(
-            self,
-            mask,
-            non_mask_name=None,
-            clipping_threshold=1.0,
-        ):
-        self.non_mask_name_pattern = re.compile("|".join(non_mask_name), re.IGNORECASE) if non_mask_name is not None else None
-        self.mask = mask
-        self.clipping_threshold = clipping_threshold
-
-    def prune_masked_weights(self, model):
-        with torch.no_grad():
-            for n, p in model.named_parameters():
-                if self.whether_mask_para(n):
-                    p.data.masked_fill_(self.mask[n], 0.0)
-    
-    def whether_mask_para(self, n):
-        if self.non_mask_name_pattern == None:
-            return True
-        else:
-            return not bool(re.search(self.non_mask_name_pattern, n))
-
-    def zero_masked_para_grad(self, model):
-        with torch.no_grad():
-            for n, p in model.named_parameters():
-                if self.whether_mask_para(n):
-                    p.grad.masked_fill_(self.mask[n], 0.0)
-    
-    def gradient_clipping(self, model):
-        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=self.clipping_threshold).item()
-        return grad_norm
-    
-    def calculate_relative_sparsity(self, model):
-        n_params = 0
-        n_masked_params = 0
-        with torch.no_grad():
-            for n, p in model.named_parameters():
-                if self.whether_mask_para(n):
-                    n_params += p.numel()
-                    n_masked_params += p.eq(0.0).sum().item()
-        return n_masked_params/n_params
-    
-    def match(self, event, state):
-        return event in [Event.FIT_START, Event.AFTER_TRAIN_BATCH, Event.BATCH_END]
-
-    def apply(self, event, state, logger):
-        if event == Event.FIT_START:
-            relative_final_sparsity = self.calculate_relative_sparsity(state.model)
-            logger.log_metrics({"relative_final_sparsity": float(relative_final_sparsity)})
-        elif event == Event.AFTER_TRAIN_BATCH:
-            # zero out the gradient of masked parameters during the sparse fine-tuning stage
-            self.zero_masked_para_grad(state.model)
-            # perform gradient clipping during the sparse fine-tuning stage for non-masked parameters
-            grad_norm = self.gradient_clipping(state.model)
-            logger.log_metrics({"grad_norm": float(grad_norm)})
-        elif event == Event.BATCH_END:
-            self.prune_masked_weights(state.model)
-
 
 class BReg(Algorithm):
     def __init__(self,
@@ -215,15 +155,15 @@ class BReg(Algorithm):
                     0.5 / sigma0 - 0.5 / sigma1))
         return c1, c2, prior_threshold, sigma0, sigma1, lambda_mix
 
-    def clear_masked_para_grad(self, model, train_step_index):
-        if train_step_index > self.cubic_prune_end:
-            with torch.no_grad():
-                for n, p in model.named_parameters():
-                    if self.whether_mask_para(n):
-                        p.grad.masked_fill_(self.final_ratio_mask[n], 0.0)
+    def clear_masked_para_grad(self, model):
+        with torch.no_grad():
+            for n, p in model.named_parameters():
+                if self.whether_mask_para(n):
+                    p.grad.masked_fill_(self.final_ratio_mask[n], 0.0)
     
     def gradient_clipping(self, model, train_step_index):
         if train_step_index > self.cubic_prune_end:
+            self.clear_masked_para_grad(model)
             grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=self.clipping_threshold).item()
             return grad_norm
         else:
@@ -337,16 +277,14 @@ class BReg(Algorithm):
         elif event == Event.AFTER_TRAIN_BATCH:
             # add prior gradients to the model during the gradual cubic pruning stage
             prior_threshold, sigma0, sigma1, lambda_mix = self.add_prior_grad(state.model, state.timestamp.batch.value)
-            # zero out the gradient of masked parameters during the sparse fine-tuning stage
-            self.clear_masked_para_grad(state.model, state.timestamp.batch.value)
-            # perform gradient clipping during the gradual cubic pruning stage for non-masked parameters
+            # perform gradient clipping during the sparse finetuning stage for non-masked parameters
             grad_norm = self.gradient_clipping(state.model, state.timestamp.batch.value)
             logger.log_metrics({"sigma0": float(sigma0)})
             logger.log_metrics({"sigma1": float(sigma1)})
             logger.log_metrics({"lambda_mix": float(lambda_mix)})
             logger.log_metrics({"prior_threshold": float(prior_threshold)})
-            #logger.log_metrics({"clipping_threshold_coef": float(clipping_threshold_coef)})
-            logger.log_metrics({"grad_norm": float(grad_norm) if grad_norm is not None else -1})
+            if grad_norm is not None:
+                logger.log_metrics({"grad_norm": float(grad_norm)})
         elif event == Event.BATCH_END:
             ratio, mask_threshold = self.magnitude_pruning(state.model, state.timestamp.batch.value)
             logger.log_metrics({"remaining_ratio": float(ratio)})
