@@ -163,6 +163,14 @@ class BReg(Algorithm):
         prior_threshold = np.sqrt(np.log((1 - lambda_mix) / lambda_mix * np.sqrt(sigma1 / sigma0)) / (
                     0.5 / sigma0 - 0.5 / sigma1))
         return c1, c2, prior_threshold, sigma0, sigma1, lambda_mix
+
+    def clear_masked_para_grad(self, model, train_step_index):
+        # Clear the gradient of masked parameters during the sparse fine-tuning stage
+        if train_step_index > self.cubic_prune_end:
+            with torch.no_grad():
+                for n, p in model.named_parameters():
+                    if self.whether_mask_para(n):
+                        p.grad.masked_fill_(self.final_ratio_mask[n], 0.0)
     
     def gradient_clipping(self, model, train_step_index):
         #clipping_threshold_coef = 1.0
@@ -285,6 +293,7 @@ class BReg(Algorithm):
             self.print_pruning_modules(state.model)
         elif event == Event.AFTER_TRAIN_BATCH:
             prior_threshold, sigma0, sigma1, lambda_mix = self.add_prior_grad(state.model, state.timestamp.batch.value)
+            self.clear_masked_para_grad(state.model, state.timestamp.batch.value)
             grad_norm = self.gradient_clipping(state.model, state.timestamp.batch.value)
             logger.log_metrics({"sigma0": float(sigma0)})
             logger.log_metrics({"sigma1": float(sigma1)})
