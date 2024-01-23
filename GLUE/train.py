@@ -155,6 +155,12 @@ def parse_args():
         type=str, 
         default='ep{epoch}-ba{batch}-rank{rank}.pt', help="Filename to save the checkpoints."
     )
+    parser.add_argument(
+        "--load_path",
+        type=str,
+        default=None,
+        help="Path to load the checkpoint."
+    )
 
     # evaluation
     parser.add_argument(
@@ -567,6 +573,7 @@ def main():
         save_latest_filename=args.save_latest_filename,
         save_overwrite=args.save_overwrite,
         autoresume=args.autoresume,
+        load_path=args.load_path,
 
         # reproducibility
         seed=args.seed,
