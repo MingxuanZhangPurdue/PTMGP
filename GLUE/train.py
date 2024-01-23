@@ -582,8 +582,6 @@ def main():
     # Train
     trainer.fit()
 
-
-
 if __name__ == "__main__":
     main()
 
