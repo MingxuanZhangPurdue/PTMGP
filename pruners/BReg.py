@@ -1,9 +1,8 @@
 import torch
 import re
 import numpy as np
-from typing import Union
+from collections import defaultdict 
 from composer.core import Algorithm, Event
-from composer.optim import DecoupledAdamW
 from pruners.utils_composer import _convert_timestr_to_int
 
 def _linear_scheduler(step, start, end, start_value, end_value):
@@ -259,19 +258,10 @@ class BReg(Algorithm):
             if self.whether_mask_para(n):
                 print (n)
     
-    def reinit_optimizer(self, model, optimizer):
-        lr = optimizer.param_groups[0]['lr']
+    def reinit_optimizer(self, optimizer):
         weight_decay = self.weight_decay_sparse_fine_tune
-        eps = optimizer.param_groups[0]['eps']
-        betas = optimizer.param_groups[0]['betas']
-        optimizer = DecoupledAdamW(
-            model.parameters(), 
-            lr=lr, 
-            weight_decay=weight_decay, 
-            eps=eps, 
-            betas=betas
-        )
-        return optimizer
+        optimizer.__setstate__({'state': defaultdict(dict)})
+        optimizer.param_groups[0]["weight_decay"] = weight_decay
         
     def zero_masked_para_grad(self, model):
         with torch.no_grad():
@@ -300,7 +290,7 @@ class BReg(Algorithm):
                 logger.log_metrics({"prior_threshold": float(prior_threshold)})
             # perform gradient clipping during the optional sparse finetuning stage for non-masked parameters
             else:
-                grad_norm = self.gradient_clipping(state.model, state.timestamp.batch.value)
+                grad_norm = self.gradient_clipping(state.model)
                 logger.log_metrics({"grad_norm": float(grad_norm)})
         elif event == Event.BATCH_END:
             ratio, mask_threshold = self.magnitude_pruning(state.model, state.timestamp.batch.value)
@@ -310,7 +300,8 @@ class BReg(Algorithm):
             logger.log_metrics({"mask_threshold": float(mask_threshold)})
             # reinitialize the optimizer at the beginning of the optional sparse finetuning stage
             if state.timestamp.batch.value == self.cubic_prune_end:
-                state.optimizer = self.reinit_optimizer(state.model, state.optimizer)
+                for optimizer in state.optimizers:
+                    self.reinit_optimizer(optimizer)
         elif event == Event.FIT_END:
             relative_final_sparsity = self.calculate_relative_sparsity(state.model)
             logger.log_metrics({"relative_final_sparsity": float(relative_final_sparsity)})
