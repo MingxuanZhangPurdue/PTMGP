@@ -49,6 +49,8 @@ def my_custom_type(value):
         return int(value)
     except ValueError:
         # If conversion to int fails, return the value as a string
+        if value == "None":
+            return None
         return value
 
 def parse_args():
@@ -179,7 +181,7 @@ def parse_args():
     # training setups
     parser.add_argument(
         "--clipping_threshold",
-        type=float,
+        type=my_custom_type,
         default=1.0,
         help="Gradient clipping threshold."
     )
@@ -298,12 +300,6 @@ def parse_args():
     parser.add_argument("--sparse_fine_tune",   type=my_custom_type,   default=0,     help="The number of training batches/steps for sparse fine-tuning.")
 
     # BReg
-    parser.add_argument(
-        "--weight_decay_sparse_fine_tune", 
-        type=float, 
-        default=0.0,   
-        help="Weight decay to use for sparse fine-tuning."
-    )
     parser.add_argument("--sigma0",             type=float,            default=1e-13, help="The smaller variance of the Mixture Gaussian prior.")
     parser.add_argument("--alpha_i_sigma0",     type=float,            default=1.0,   help="The initial factor value of the sigma0.")
     parser.add_argument("--alpha_f_sigma0",     type=float,            default=1.0,   help="The final factor value of the sigma0.")
@@ -325,6 +321,23 @@ def parse_args():
                         default=None,
                         nargs='+',
                         help="The names of the modules that should not be penalized by the prior, if any. We will match the names using regex.")
+    parser.add_argument(
+        "--weight_decay_sparse_fine_tune", 
+        type=float, 
+        default=0.0,   
+        help="Weight decay to use for sparse fine-tuning."
+    )
+    parser.add_argument(
+        "--lr_sparse_fine_tune",
+        type=my_custom_type,
+        default=None,
+        help="Initial learning rate (after the potential warmup period) to use for sparse fine-tuning, if None, will use the same learning rate specified by --learning_rate."
+    )
+    parser.add_argument(
+        "--reinit_optimizer_flag",
+        action="store_true",
+        help="If passed, will reinitialize the optimizer for sparse fine-tuning."
+    )
 
     # PLATON
     parser.add_argument(
