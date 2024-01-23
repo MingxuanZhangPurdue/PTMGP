@@ -3,6 +3,7 @@ import re
 import numpy as np
 from typing import Union
 from composer.core import Algorithm, Event
+from composer.optim import DecoupledAdamW
 from pruners.utils_composer import _convert_timestr_to_int
 
 def _linear_scheduler(step, start, end, start_value, end_value):
@@ -18,33 +19,37 @@ def _linear_scheduler(step, start, end, start_value, end_value):
         return current_factor
 
 class BReg(Algorithm):
-    def __init__(self,
-                 train_size,
-                 max_train_steps,
-                 clipping_threshold=1.0,
-                 sigma0=1e-13,
-                 alpha_i_sigma0=1.0, 
-                 alpha_f_sigma0=1.0,
-                 sigma1=0.05,
-                 alpha_i_sigma1=1.0, 
-                 alpha_f_sigma1=1.0,
-                 lambda_mix=1e-3,
-                 alpha_i_lambda=1.0, 
-                 alpha_f_lambda=0.01,
-                 anneal_start=None, 
-                 anneal_end=None,
-                 final_ratio=0.1, 
-                 initial_ratio=1.0,
-                 initial_warmup=0, 
-                 final_warmup=0,
-                 deltaT=10,
-                 deltaT_cooldown=1,
-                 sparse_fine_tune=0,
-                 masking_value=0.0, 
-                 non_mask_name=None, 
-                 non_prior_name=None):
+    def __init__(
+            self,
+            train_size,
+            max_train_steps,
+            sigma0=1e-13,
+            alpha_i_sigma0=1.0, 
+            alpha_f_sigma0=1.0,
+            sigma1=0.05,
+            alpha_i_sigma1=1.0, 
+            alpha_f_sigma1=1.0,
+            lambda_mix=1e-3,
+            alpha_i_lambda=1.0, 
+            alpha_f_lambda=0.01,
+            anneal_start=None, 
+            anneal_end=None,
+            final_ratio=0.1, 
+            initial_ratio=1.0,
+            initial_warmup=0, 
+            final_warmup=0,
+            deltaT=10,
+            deltaT_cooldown=1,
+            sparse_fine_tune=0,
+            masking_value=0.0, 
+            non_mask_name=None, 
+            non_prior_name=None,
+            clipping_threshold=1.0,
+            weight_decay_sparse_fine_tune=0.0,
+        ):
         
         self.clipping_threshold = clipping_threshold
+        self.weight_decay_sparse_fine_tune = weight_decay_sparse_fine_tune
 
         self.final_ratio_mask = None
         self.train_size = train_size
@@ -105,7 +110,6 @@ class BReg(Algorithm):
         anneal_end = _convert_timestr_to_int(args.anneal_end, max_train_steps, train_dataloader_len) if args.anneal_end is not None else None
         return self(train_size, 
                     max_train_steps,
-                    clipping_threshold=args.clipping_threshold,
                     sigma0=args.sigma0, 
                     alpha_i_sigma0=args.alpha_i_sigma0,
                     alpha_f_sigma0=args.alpha_f_sigma0,
@@ -126,7 +130,9 @@ class BReg(Algorithm):
                     sparse_fine_tune=sparse_fine_tune,
                     masking_value=args.masking_value, 
                     non_mask_name=args.non_mask_name, 
-                    non_prior_name=args.non_prior_name
+                    non_prior_name=args.non_prior_name,
+                    clipping_threshold=args.clipping_threshold,
+                    weight_decay_sparse_fine_tune=args.weight_decay_sparse_fine_tune,
                     )
     
     def linear_prior_scheduler(self, train_step_index):
@@ -154,21 +160,26 @@ class BReg(Algorithm):
         prior_threshold = np.sqrt(np.log((1 - lambda_mix) / lambda_mix * np.sqrt(sigma1 / sigma0)) / (
                     0.5 / sigma0 - 0.5 / sigma1))
         return c1, c2, prior_threshold, sigma0, sigma1, lambda_mix
-
-    def clear_masked_para_grad(self, model):
+    
+    def reinit_optimizer(self, model, optimizer):
+        lr = optimizer.param_groups[0]['lr']
+        weight_decay = self.weight_decay_sparse_fine_tune
+        eps = optimizer.param_groups[0]['eps']
+        betas = optimizer.param_groups[0]['betas']
+        optimizer = DecoupledAdamW(model.parameters(), lr=lr, weight_decay=weight_decay, eps=eps, betas=betas)
+        return optimizer
+        
+    def zero_masked_para_grad(self, model):
         with torch.no_grad():
             for n, p in model.named_parameters():
                 if self.whether_mask_para(n):
                     p.grad.masked_fill_(self.final_ratio_mask[n], 0.0)
     
-    def gradient_clipping(self, model, train_step_index):
-        if train_step_index > self.cubic_prune_end:
-            self.clear_masked_para_grad(model)
-            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=self.clipping_threshold).item()
-            return grad_norm
-        else:
-            return None
-            
+    def gradient_clipping(self, model):
+        self.zero_masked_para_grad(model)
+        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=self.clipping_threshold).item()
+        return grad_norm
+    
     def add_prior_grad(self, model, train_step_index):
         if train_step_index > self.cubic_prune_end:
             return -1, -1, -1, -1
@@ -278,19 +289,21 @@ class BReg(Algorithm):
             # add prior gradients to the model during the gradual cubic pruning stage
             prior_threshold, sigma0, sigma1, lambda_mix = self.add_prior_grad(state.model, state.timestamp.batch.value)
             # perform gradient clipping during the sparse finetuning stage for non-masked parameters
-            grad_norm = self.gradient_clipping(state.model, state.timestamp.batch.value)
+            if state.timestamp.batch.value > self.cubic_prune_end:
+                grad_norm = self.gradient_clipping(state.model, state.timestamp.batch.value)
+                logger.log_metrics({"grad_norm": float(grad_norm)})
             logger.log_metrics({"sigma0": float(sigma0)})
             logger.log_metrics({"sigma1": float(sigma1)})
             logger.log_metrics({"lambda_mix": float(lambda_mix)})
             logger.log_metrics({"prior_threshold": float(prior_threshold)})
-            if grad_norm is not None:
-                logger.log_metrics({"grad_norm": float(grad_norm)})
         elif event == Event.BATCH_END:
             ratio, mask_threshold = self.magnitude_pruning(state.model, state.timestamp.batch.value)
             logger.log_metrics({"remaining_ratio": float(ratio)})
             if mask_threshold is None:
                 mask_threshold = 0.0
             logger.log_metrics({"mask_threshold": float(mask_threshold)})
+            if state.timestamp.batch.value == self.cubic_prune_end:
+                state.optimizer = self.reinit_optimizer(state.model, state.optimizer)
         elif event == Event.FIT_END:
             relative_final_sparsity = self.calculate_relative_sparsity(state.model)
             logger.log_metrics({"relative_final_sparsity": float(relative_final_sparsity)})
