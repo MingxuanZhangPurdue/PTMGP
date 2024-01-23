@@ -43,17 +43,11 @@ class BReg(Algorithm):
             masking_value=0.0, 
             non_mask_name=None, 
             non_prior_name=None,
-            # Sparse fine-tuning parameters
+            # Sparse fine-tuning parameters for optional sparse fine-tuning stage
             clipping_threshold=None,
-            lr_sparse_fine_tune=None,
-            weight_decay_sparse_fine_tune=0.0,
-            reinit_optimizer_flag=True,
         ):
         
         self.clipping_threshold = clipping_threshold
-        self.weight_decay_sparse_fine_tune = weight_decay_sparse_fine_tune
-        self.reinit_optimizer_flag = reinit_optimizer_flag
-        self.lr_sparse_fine_tune = lr_sparse_fine_tune
 
         self.final_ratio_mask = None
         self.train_size = train_size
@@ -137,9 +131,6 @@ class BReg(Algorithm):
             non_mask_name=args.non_mask_name, 
             non_prior_name=args.non_prior_name,
             clipping_threshold=args.clipping_threshold,
-            lr_sparse_fine_tune=args.lr_sparse_fine_tune,
-            weight_decay_sparse_fine_tune=args.weight_decay_sparse_fine_tune,
-            reinit_optimizer_flag=args.reinit_optimizer_flag
         )
     
     def linear_prior_scheduler(self, train_step_index):
@@ -264,13 +255,6 @@ class BReg(Algorithm):
         for n, _ in model.named_parameters():
             if self.whether_mask_para(n):
                 print (n)
-    
-    def reinit_optimizer(self, optimizer):
-        weight_decay = self.weight_decay_sparse_fine_tune
-        lr = self.lr_sparse_fine_tune if self.lr_sparse_fine_tune is not None else optimizer.param_groups[0]["lr"]
-        optimizer.__setstate__({'state': defaultdict(dict)})
-        optimizer.param_groups[0]["weight_decay"] = weight_decay
-        optimizer.param_groups[0]["lr"] = lr
         
     def zero_masked_para_grad(self, model):
         with torch.no_grad():
@@ -308,10 +292,6 @@ class BReg(Algorithm):
             if mask_threshold is None:
                 mask_threshold = 0.0
             logger.log_metrics({"mask_threshold": float(mask_threshold)})
-            # reinitialize the optimizer at the beginning of the optional sparse finetuning stage
-            if state.timestamp.batch.value == self.cubic_prune_end and self.reinit_optimizer_flag:
-                for optimizer in state.optimizers:
-                    self.reinit_optimizer(optimizer)
         elif event == Event.FIT_END:
             relative_final_sparsity = self.calculate_relative_sparsity(state.model)
             logger.log_metrics({"relative_final_sparsity": float(relative_final_sparsity)})
