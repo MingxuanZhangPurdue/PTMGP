@@ -37,7 +37,7 @@ def my_custom_type(value):
         return value
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Finetune a transformers model on a Masked Language Modeling task")
+    parser = argparse.ArgumentParser(description="Upstreaming pruing a transformers model on a Masked Language Modeling task")
     parser.add_argument(
         "--trust_remote_code",
         action="store_true",
@@ -164,15 +164,9 @@ def parse_args():
 
     # training arguments
     parser.add_argument(
-        "--max_grad_norm",
-        type=float,
-        default=1.0,
-        help="Max gradient norm.",
-    )
-    parser.add_argument(
         "--precision",
         type=str,
-        default="amp_fp16",
+        default=None,
         help="The precision to use, can be fp32, amp_fp16, or amp_bf16.",
         choices=[None, "fp32", "amp_fp16", "amp_bf16"],
     )
@@ -185,7 +179,7 @@ def parse_args():
     parser.add_argument(
         "--learning_rate",
         type=float,
-        default=5e-4,
+        default=2e-4,
         help="Initial learning rate (after the potential warmup period) to use.",
     )
     parser.add_argument(
@@ -197,7 +191,7 @@ def parse_args():
     parser.add_argument(
         "--max_duration", 
         type=str,   
-        default="3ep",
+        default="13ep",
         help="Total number of training epochs/batches/steps to perform."
     )
     parser.add_argument(
@@ -208,8 +202,8 @@ def parse_args():
     )
     parser.add_argument(
         "--alpha_f",
-        type=float, 
-        default=0.01, 
+        type=float,
+        default=0.001, 
         help="Final learning rate multiplier for the linear lr scheduler."
     )
 
@@ -289,22 +283,19 @@ def parse_args():
         default=42, 
         help="A seed for reproducible training."
     )
-
     # cubic pruning scheduler
-    parser.add_argument("--final_ratio",        type=float,            default=0.1, help="The final ratio of the remaining weights.")
-    parser.add_argument("--initial_ratio",      type=float,            default=1,   help="The initial ratio of the remaining weights.")
-    parser.add_argument("--initial_warmup",     type=my_custom_type,   default=1,   help="The number of training batches/steps for initial warmup.")
-    parser.add_argument("--final_warmup",       type=my_custom_type,   default=0,   help="The number of training batches/steps for final warmup.")
-    parser.add_argument("--deltaT",             type=my_custom_type,   default=10,  help="The interval to mask weights.")
-    parser.add_argument("--deltaT_cooldown",    type=my_custom_type,   default=10,  help="The interval to mask weights.")
-    parser.add_argument("--sparse_fine_tune",   type=my_custom_type,   default=0,   help="The number of training batches/steps for sparse fine-tuning.")
+    parser.add_argument("--final_ratio",        type=float,            default=0.1,   help="The final ratio of the remaining weights.")
+    parser.add_argument("--initial_ratio",      type=float,            default=1,     help="The initial ratio of the remaining weights.")
+    parser.add_argument("--initial_warmup",     type=my_custom_type,   default=1,     help="The number of training batches/steps for initial warmup.")
+    parser.add_argument("--final_warmup",       type=my_custom_type,   default=0,     help="The number of training batches/steps for final warmup.")
+    parser.add_argument("--deltaT",             type=my_custom_type,   default=10,    help="The interval to mask weights.")
 
     # BReg
     parser.add_argument("--sigma0",             type=float,            default=1e-13, help="The smaller variance of the Mixture Gaussian prior.")
     parser.add_argument("--alpha_i_sigma0",     type=float,            default=1.0,   help="The initial factor value of the sigma0.")
     parser.add_argument("--alpha_f_sigma0",     type=float,            default=1.0,   help="The final factor value of the sigma0.")
 
-    parser.add_argument("--sigma1",             type=float,            default=0.05,   help="The larger variance of the Mixture Gaussian prior.")
+    parser.add_argument("--sigma1",             type=float,            default=0.05,  help="The larger variance of the Mixture Gaussian prior.")
     parser.add_argument("--alpha_i_sigma1",     type=float,            default=1.0,   help="The initial factor value of the sigma1.")
     parser.add_argument("--alpha_f_sigma1",     type=float,            default=1.0,   help="The final factor value of the sigma1.")
     
@@ -315,13 +306,19 @@ def parse_args():
     parser.add_argument("--anneal_start",       type=my_custom_type,   default=None,  help="The number of traing batches/steps for lambda_mix annealing to start.")
     parser.add_argument("--anneal_end",         type=my_custom_type,   default=None,  help="The number of traing batches/steps for lambda_mix annealing to end.")
 
-    parser.add_argument("--masking_value",      type=float,            default=0.0,   help="The filling value of the masked weights.")
-
+    parser.add_argument("--masking_value",      type=float,            default=0.0,  help="The filling value of the masked weights.")
     parser.add_argument('--non_prior_name',
                         type=str,
                         default=None,
                         nargs='+',
                         help="The names of the modules that should not be penalized by the prior, if any. We will match the names using regex.")
+    parser.add_argument(
+        '--init_prior_in_cooldown',
+        action='store_true',
+        help="If passed, will use the initial prior setting during the cubic prune cooldown period."
+    )
+    parser.add_argument("--deltaT_cooldown",    type=my_custom_type,   default=10,    help="The interval to mask weights.")
+    parser.add_argument("--sparse_fine_tune",   type=my_custom_type,   default=0,     help="The number of training batches/steps for sparse fine-tuning.")
 
     # pruning algorithm selection
     parser.add_argument(
@@ -331,6 +328,7 @@ def parse_args():
         default=["layernorm", "classifier", "pooler", "embedding", "bias", "prediction"],
         help="The names of the modules that should not be pruned. We will match the names using regex."
     )
+
     args = parser.parse_args()
 
     return args
@@ -449,10 +447,7 @@ def main():
         max_train_steps = train_time.value
     else:
         raise ValueError(f"Unsupported time unit: {train_time.unit}")
-    pruner_algorithm = PMGP_Algorithm.from_args(train_size, max_train_steps, args)
-
-    # gradient clipping following oBERT
-    gc = GradientClipping(clipping_type='norm', clipping_threshold=args.max_grad_norm)
+    pruner_algorithm = pruner_algorithm = BReg.from_args(train_size, max_train_steps, len(train_dataloader), args)
 
     # initialize the trainer
     trainer = Trainer(
@@ -477,7 +472,7 @@ def main():
         callbacks=[LRMonitor(), RuntimeEstimator()],
 
         # algorithms
-        algorithms=[gc, pruner_algorithm],
+        algorithms=[pruner_algorithm],
 
         # checkpointing
         run_name=args.run_name,

@@ -355,7 +355,7 @@ def parse_args():
         '--non_mask_name', 
         nargs='+', 
         type=str, 
-        default=["layernorm", "classifier", "pooler", "embedding"],
+        default=["layernorm", "classifier", "pooler", "embedding", "bias", "prediction"],
         help="The names of the modules that should not be pruned. We will match the names using regex."
     )
     parser.add_argument(
