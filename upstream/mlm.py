@@ -14,7 +14,6 @@ from composer.utils.dist import get_sampler
 from composer.utils import reproducibility
 from composer import Time, TimeUnit
 from composer.models.huggingface import HuggingFaceModel
-from composer.algorithms import GradientClipping
 from composer import Trainer
 from composer.callbacks import LRMonitor, RuntimeEstimator
 from composer.loggers import WandBLogger
