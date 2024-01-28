@@ -36,7 +36,7 @@ def my_custom_type(value):
         return value
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Upstreaming pruing a transformers model on a Masked Language Modeling task")
+    parser = argparse.ArgumentParser(description="Upstreaming prune a transformers model on a Masked Language Modeling task")
     parser.add_argument(
         "--trust_remote_code",
         action="store_true",
@@ -163,6 +163,12 @@ def parse_args():
 
     # training arguments
     parser.add_argument(
+        "--clipping_threshold",
+        type=float,
+        default=1.0,
+        help="The clipping threshold to use for the gradient clipping.",
+    )
+    parser.add_argument(
         "--precision",
         type=str,
         default=None,
@@ -196,13 +202,13 @@ def parse_args():
     parser.add_argument(
         "--t_warmup", 
         type=str, 
-        default="0.05dur", 
+        default="0.0dur", 
         help="Number of steps for the warmup in the linear lr scheduler."
     )
     parser.add_argument(
         "--alpha_f",
         type=float,
-        default=0.001, 
+        default=0.001,
         help="Final learning rate multiplier for the linear lr scheduler."
     )
 
