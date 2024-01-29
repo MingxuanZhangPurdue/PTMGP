@@ -512,7 +512,7 @@ def main():
     trainer.fit()
 
     # Save the final ratio mask
-    if pruner_algorithm.final_ratio_mask is not None:
+    if pruner_algorithm.final_ratio_mask is not None and args.save_folder is not None:
         final_ratio_mask = pruner_algorithm.final_ratio_mask
         torch.save(final_ratio_mask, f"{args.save_folder}/final_ratio_mask.pt")
     else:
