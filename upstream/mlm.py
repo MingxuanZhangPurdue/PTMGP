@@ -254,6 +254,12 @@ def parse_args():
 
     # evaluation
     parser.add_argument(
+        "--log_param_stat_interval",
+        type=str,
+        default=None,
+        help="Interval to log the parameter statistics."
+    )
+    parser.add_argument(
         "--eval_interval", 
         type=str, 
         default="0.1dur", 
