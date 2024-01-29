@@ -1,7 +1,6 @@
 import warnings
 from itertools import chain
 from datasets import concatenate_datasets, load_dataset
-from composer.utils.dist import barrier, get_local_rank, get_local_world_size
 
 def _get_tokenized_mlm_datasets_from_raw_datasets(
     raw_datasets,
@@ -51,9 +50,6 @@ def _get_tokenized_mlm_datasets_from_raw_datasets(
                 return_special_tokens_mask=True,
             )
 
-        if get_local_rank() > 0 and get_local_world_size() > 1:
-            print("Waiting for main process to perform the mapping")
-            barrier()
         tokenized_datasets = raw_datasets.map(
             tokenize_function,
             batched=True,
@@ -62,9 +58,6 @@ def _get_tokenized_mlm_datasets_from_raw_datasets(
             load_from_cache_file=not args.overwrite_cache,
             desc="Running tokenizer on dataset line_by_line",
         )
-        if get_local_rank() == 0 and get_local_world_size() > 1:
-            print("Loading results from main process")
-            barrier()
     else:
         # Otherwise, we tokenize every text, then concatenate them together before
         # splitting them in smaller parts. We use `return_special_tokens_mask=True`
@@ -75,9 +68,6 @@ def _get_tokenized_mlm_datasets_from_raw_datasets(
                 examples[text_column_name], return_special_tokens_mask=True
             )
 
-        if get_local_rank() > 0 and get_local_world_size() > 1:
-            print("Waiting for main process to perform the mapping")
-            barrier()
         tokenized_datasets = raw_datasets.map(
             tokenize_function,
             batched=True,
@@ -86,9 +76,6 @@ def _get_tokenized_mlm_datasets_from_raw_datasets(
             load_from_cache_file=not args.overwrite_cache,
             desc="Running tokenizer on every text in dataset",
         )
-        if get_local_rank() == 0 and get_local_world_size() > 1:
-            print("Loading results from main process")
-            barrier()
 
         # Main data processing function that will concatenate all texts from our
         # dataset and generate chunks of max_seq_length.
@@ -112,9 +99,6 @@ def _get_tokenized_mlm_datasets_from_raw_datasets(
             }
             return result
         
-        if get_local_rank() > 0 and get_local_world_size() > 1:
-            print("Waiting for main process to perform the mapping")
-            barrier()
         tokenized_datasets = tokenized_datasets.map(
             group_texts,
             batched=True,
@@ -122,9 +106,6 @@ def _get_tokenized_mlm_datasets_from_raw_datasets(
             load_from_cache_file=not args.overwrite_cache,
             desc=f"Grouping texts in chunks of {max_seq_length}",
         )
-        if get_local_rank() == 0 and get_local_world_size() > 1:
-            print("Loading results from main process")
-            barrier()
     return tokenized_datasets
 
 
