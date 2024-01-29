@@ -391,7 +391,6 @@ def main():
     tokenized_datasets = get_tokenized_mlm_datasets(
         tokenizer=tokenizer,
         args=args,
-        device='gpu' if torch.cuda.is_available() else 'cpu'
     )
 
     train_dataset = tokenized_datasets["train"]
