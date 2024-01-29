@@ -255,14 +255,14 @@ def parse_args():
     # evaluation
     parser.add_argument(
         "--log_param_stat_interval",
-        type=str,
-        default=my_custom_type,
+        type=my_custom_type,
+        default=None,
         help="Interval to log the parameter statistics."
     )
     parser.add_argument(
         "--eval_interval", 
-        type=str, 
-        default=my_custom_type,
+        type=my_custom_type, 
+        default=None,
         help="Interval to evaluate the model."
     )
     parser.add_argument(
