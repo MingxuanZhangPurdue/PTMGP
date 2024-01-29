@@ -183,7 +183,7 @@ def parse_args():
     parser.add_argument(
         "--learning_rate",
         type=float,
-        default=2e-4,
+        default=1e-4,
         help="Initial learning rate (after the potential warmup period) to use.",
     )
     parser.add_argument(
@@ -346,6 +346,13 @@ def main():
     # reproducibility
     reproducibility.seed_all(args.seed)
 
+    # initialize the wandb logger
+    wandb_logger = WandBLogger(
+        project=args.wandb_project,
+        name=args.wandb_name,
+        init_kwargs = {"config": vars(args)}
+    )
+
     # load the model and tokenizer
     config = AutoConfig.from_pretrained(
         args.model_name_or_path,
@@ -433,13 +440,6 @@ def main():
     lr_scheduler = LinearWithWarmupScheduler(
         t_warmup=args.t_warmup,
         alpha_f=args.alpha_f
-    )
-
-    # initialize the wandb logger
-    wandb_logger = WandBLogger(
-        project=args.wandb_project,
-        name=args.wandb_name,
-        init_kwargs = {"config": vars(args)}
     )
 
     # initialize the pruner algorithm
