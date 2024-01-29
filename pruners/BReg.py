@@ -46,7 +46,7 @@ class BReg(Algorithm):
             clipping_threshold=None,
             # whethter use the inital prior regularization (smaller) during the cool down stage
             init_prior_in_cooldown=False,
-            # the interval to print the parameter statistics
+            # the interval to log the parameter statistics
             log_param_stat_interval=None,
         ):
         
