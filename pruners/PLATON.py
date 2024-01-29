@@ -10,7 +10,7 @@ class PLATON(Algorithm):
                  beta2=0.85,
                  initial_ratio=1.0, 
                  final_ratio=0.1,
-                 initial_warmup=1, 
+                 initial_warmup=1,
                  final_warmup=1, 
                  deltaT=10,
                  non_mask_name=None):
@@ -77,10 +77,13 @@ class PLATON(Algorithm):
         cubic_prune_end = self.cubic_prune_end
         ratio_scheduler_steps = self.ratio_scheduler_steps
         mask_ind = False
-        if train_step_index <= cubic_prune_start:
-            ratio = initial_ratio
+        if train_step_index < cubic_prune_start:
+            ratio = 1.0
             mask_ind = False
-        elif train_step_index > cubic_prune_end:
+        elif train_step_index == cubic_prune_start:
+            ratio = initial_ratio
+            mask_ind = True
+        elif train_step_index >= cubic_prune_end:
             ratio = final_ratio
             mask_ind = True
         else:
@@ -144,7 +147,7 @@ class PLATON(Algorithm):
         self.update_ipt_with_local_window(model, train_step_index)
         # Get the remaining ratio
         ratio, mask_ind = self.cubic_remaining_ratio_scheduler(train_step_index)
-        if mask_ind:
+        if mask_ind and ratio < 1.0:
             # Mask weights during masking horizon
             mask_threshold = self.mask_with_threshold(model, ratio)
         else:
