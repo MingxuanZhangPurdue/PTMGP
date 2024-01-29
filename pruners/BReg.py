@@ -312,14 +312,14 @@ class BReg(Algorithm):
                     grad_norm = self.gradient_clipping(state.model)
                     logger.log_metrics({"grad_norm": float(grad_norm)})
         elif event == Event.BATCH_END:
+            if self.log_param_stat_interval is not None and state.timestamp.batch.value % self.log_param_stat_interval == 0:
+                stats = self.param_dist_stats(state.model)
+                logger.log_metrics(stats)
             ratio, mask_threshold = self.magnitude_pruning(state.model, state.timestamp.batch.value)
             logger.log_metrics({"remaining_ratio": float(ratio)})
             if mask_threshold is None:
                 mask_threshold = 0.0
             logger.log_metrics({"mask_threshold": float(mask_threshold)})
-            if self.log_param_stat_interval is not None and state.timestamp.batch.value % self.log_param_stat_interval == 0:
-                stats = self.param_dist_stats(state.model)
-                logger.log_metrics(stats)
         elif event == Event.FIT_END:
             relative_final_sparsity = self.calculate_relative_sparsity(state.model)
             logger.log_metrics({"relative_final_sparsity": float(relative_final_sparsity)})
