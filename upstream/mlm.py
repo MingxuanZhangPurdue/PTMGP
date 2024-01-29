@@ -33,6 +33,17 @@ def my_custom_type(value):
     except ValueError:
         # If conversion to int fails, return the value as a string
         return value
+    
+def my_custom_type2(value):
+    try:
+        # Try to convert the value to an integer
+        return float(value)
+    except ValueError:
+        # If conversion to int fails, return the value as a string
+        if value == "None":
+            return None
+        else:
+            raise ValueError(f"Unsupported value type {value}")
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Upstream prune a transformers model on a Masked Language Modeling task")
@@ -163,7 +174,7 @@ def parse_args():
     # training arguments
     parser.add_argument(
         "--clipping_threshold",
-        type=float,
+        type=my_custom_type2,
         default=1.0,
         help="The clipping threshold to use for the gradient clipping.",
     )

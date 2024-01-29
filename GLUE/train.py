@@ -115,7 +115,7 @@ def parse_args():
     parser.add_argument(
         "--max_seq_length",
         type=int,
-        default=128,
+        default=512,
         help=(
             "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
             "sequences shorter will be padded if `--pad_to_max_length` is passed."
@@ -177,15 +177,21 @@ def parse_args():
 
     # evaluation
     parser.add_argument(
+        "--log_param_stat_interval",
+        type=my_custom_type,
+        default=None,
+        help="Interval to log the parameter statistics."
+    )
+    parser.add_argument(
         "--eval_interval", 
-        type=str, 
-        default="0.1dur", 
+        type=my_custom_type, 
+        default="1ep",
         help="Interval to evaluate the model."
     )
     parser.add_argument(
         "--per_device_eval_batch_size", 
         type=int, 
-        default=256,
+        default=64,
         help="Batch size (per device) for the evaluation dataloader."
     )
 
@@ -239,7 +245,7 @@ def parse_args():
     parser.add_argument(
         "--t_warmup", 
         type=str, 
-        default="0.05dur", 
+        default="0.01dur", 
         help="Number of steps for the warmup in the linear lr scheduler."
     )
     parser.add_argument(
@@ -297,7 +303,7 @@ def parse_args():
     parser.add_argument(
         "--seed", 
         type=int, 
-        default=47, 
+        default=42, 
         help="Random seed to use for reproducibility."
     )
 
