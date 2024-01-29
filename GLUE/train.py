@@ -78,6 +78,12 @@ def parse_args():
 
     # dataset, model, and tokenizer
     parser.add_argument(
+        "--preprocessing_num_workers",
+        type=int,
+        default=None,
+        help="The number of processes to use for the preprocessing.",
+    )
+    parser.add_argument(
         "--overwrite_cache",
         action="store_true",
         help="Overwrite the cached training and evaluation sets",
@@ -250,8 +256,8 @@ def parse_args():
     )
     parser.add_argument(
         "--alpha_f",
-        type=float, 
-        default=0.0, 
+        type=float,
+        default=0.1, 
         help="Final learning rate multiplier for lr scheduler."
     )
     parser.add_argument(
@@ -464,6 +470,7 @@ def main():
     processed_datasets = raw_datasets.map(
             preprocess_function,
             batched=True,
+            num_proc=args.preprocessing_num_workers,
             remove_columns=raw_datasets["train"].column_names,
             load_from_cache_file=not args.overwrite_cache,
             desc="Running tokenizer on dataset",
