@@ -46,10 +46,13 @@ class BReg(Algorithm):
             clipping_threshold=None,
             # whethter use the inital prior regularization (smaller) during the cool down stage
             init_prior_in_cooldown=False,
+            # the interval to print the parameter statistics
+            log_param_stat_interval=None,
         ):
         
         self.clipping_threshold = clipping_threshold
         self.init_prior_in_cooldown = init_prior_in_cooldown
+        self.log_param_stat_interval = log_param_stat_interval
 
         self.final_ratio_mask = None
         self.train_size = train_size
@@ -108,6 +111,7 @@ class BReg(Algorithm):
         sparse_fine_tune = _convert_timestr_to_int(args.sparse_fine_tune, max_train_steps, train_dataloader_len)
         anneal_start = _convert_timestr_to_int(args.anneal_start, max_train_steps, train_dataloader_len) if args.anneal_start is not None else None
         anneal_end = _convert_timestr_to_int(args.anneal_end, max_train_steps, train_dataloader_len) if args.anneal_end is not None else None
+        log_param_stat_interval = _convert_timestr_to_int(args.log_param_stat_interval, max_train_steps, train_dataloader_len) if args.log_param_stat_interval is not None else None
         return self(
             train_size, 
             max_train_steps,
@@ -133,7 +137,8 @@ class BReg(Algorithm):
             non_mask_name=args.non_mask_name, 
             non_prior_name=args.non_prior_name,
             clipping_threshold=args.clipping_threshold,
-            init_prior_in_cooldown=args.init_prior_in_cooldown
+            init_prior_in_cooldown=args.init_prior_in_cooldown,
+            log_param_stat_interval=log_param_stat_interval,
         )
     
     def linear_prior_scheduler(self, train_step_index):
@@ -263,15 +268,15 @@ class BReg(Algorithm):
         with torch.no_grad():
             for n, p in model.named_parameters():
                 if self.whether_mask_para(n):
-                    is_dict[n] = p.detach()
+                    is_dict[n] = p.abs().detach()
         all_is = torch.cat([is_dict[n].view(-1) for n in is_dict])
         stats = {}
-        stats["mean"] = torch.mean(all_is).item()
-        stats["std"] = torch.std(all_is).item()
-        stats["median"] = torch.median(all_is).item()
-        stats["q1"] = torch.kthvalue(all_is, int(all_is.shape[0] * 0.25))[0].item()
-        stats["q3"] = torch.kthvalue(all_is, int(all_is.shape[0] * 0.75))[0].item()
-        stats["max"] = torch.max(all_is).item()
+        quantiles = torch.tensor([0.25, 0.5, 0.75, 1.0]).to(all_is.device)
+        q1, q2, q3, max = torch.quantile(all_is, quantiles, interpolation="nearest").tolist()
+        stats["q1"] = q1
+        stats["q2"] = q2
+        stats["q3"] = q3
+        stats["max"] = max
         return stats
 
     def print_pruning_modules(self, model):
@@ -316,6 +321,9 @@ class BReg(Algorithm):
             if mask_threshold is None:
                 mask_threshold = 0.0
             logger.log_metrics({"mask_threshold": float(mask_threshold)})
+            if self.log_param_stat_interval is not None and state.timestamp.batch.value % self.log_param_stat_interval == 0:
+                stats = self.param_dist_stats(state.model)
+                logger.log_metrics(stats)
         elif event == Event.FIT_END:
             relative_final_sparsity = self.calculate_relative_sparsity(state.model)
             logger.log_metrics({"relative_final_sparsity": float(relative_final_sparsity)})
