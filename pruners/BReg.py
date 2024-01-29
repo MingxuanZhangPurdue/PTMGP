@@ -258,6 +258,22 @@ class BReg(Algorithm):
                     n_masked_params += p.eq(0.0).sum().item()
         return n_masked_params/n_params
     
+    def param_dist_stats(self, model):
+        is_dict = {}
+        with torch.no_grad():
+            for n, p in model.named_parameters():
+                if self.whether_mask_para(n):
+                    is_dict[n] = p.detach()
+        all_is = torch.cat([is_dict[n].view(-1) for n in is_dict])
+        stats = {}
+        stats["mean"] = torch.mean(all_is).item()
+        stats["std"] = torch.std(all_is).item()
+        stats["median"] = torch.median(all_is).item()
+        stats["q1"] = torch.kthvalue(all_is, int(all_is.shape[0] * 0.25))[0].item()
+        stats["q3"] = torch.kthvalue(all_is, int(all_is.shape[0] * 0.75))[0].item()
+        stats["max"] = torch.max(all_is).item()
+        return stats
+
     def print_pruning_modules(self, model):
         print ("list of model modules to be pruned:")
         for n, _ in model.named_parameters():
