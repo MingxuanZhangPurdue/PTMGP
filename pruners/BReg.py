@@ -271,12 +271,8 @@ class BReg(Algorithm):
                     is_dict[n] = p.abs().detach()
         all_is = torch.cat([is_dict[n].view(-1) for n in is_dict])
         stats = {}
-        quantiles = torch.tensor([0.25, 0.5, 0.75, 1.0]).to(all_is.device)
-        q1, q2, q3, max = torch.quantile(all_is, quantiles, interpolation="nearest").tolist()
-        stats["q1"] = q1
-        stats["q2"] = q2
-        stats["q3"] = q3
-        stats["max"] = max
+        stats["avg"] = float(all_is.mean())
+        stats["std"] = float(all_is.std())
         return stats
 
     def print_pruning_modules(self, model):
