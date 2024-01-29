@@ -262,7 +262,7 @@ def parse_args():
     parser.add_argument(
         "--eval_interval", 
         type=my_custom_type, 
-        default=None,
+        default="1ep",
         help="Interval to evaluate the model."
     )
     parser.add_argument(
