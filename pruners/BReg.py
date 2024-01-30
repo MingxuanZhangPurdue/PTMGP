@@ -317,9 +317,8 @@ class BReg(Algorithm):
                 logger.log_metrics(stats)
             ratio, mask_threshold = self.magnitude_pruning(state.model, state.timestamp.batch.value)
             logger.log_metrics({"remaining_ratio": float(ratio)})
-            if mask_threshold is None:
-                mask_threshold = 0.0
-            logger.log_metrics({"mask_threshold": float(mask_threshold)})
+            if mask_threshold is not None:
+                logger.log_metrics({"mask_threshold": float(mask_threshold)})
         elif event == Event.FIT_END:
             relative_final_sparsity = self.calculate_relative_sparsity(state.model)
             logger.log_metrics({"relative_final_sparsity": float(relative_final_sparsity)})

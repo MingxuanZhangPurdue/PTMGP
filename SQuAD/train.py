@@ -1,3 +1,23 @@
+#!/usr/bin/env python
+# coding=utf-8
+# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Fine-tuning a 🤗 Transformers model for question answering using 🤗 Accelerate.
+"""
+# You can also adapt this script on your own question answering task. Pointers for this are left as comments.
+
 import argparse
 import json
 import logging
@@ -14,12 +34,15 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from datasets import load_dataset
+from huggingface_hub import Repository, create_repo
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from utils_qa import postprocess_qa_predictions
 
 import transformers
 from transformers import (
+    CONFIG_MAPPING,
+    MODEL_MAPPING,
     AutoConfig,
     AutoModelForQuestionAnswering,
     AutoTokenizer,
@@ -29,46 +52,80 @@ from transformers import (
     default_data_collator,
     get_scheduler,
 )
+from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils.versions import require_version
 
-from pruners.PMGP import PMGP_Algorithm
-from pruners.PLATON import PLATON_Algorithm
+from pruners.BReg import BReg
+
+
+# Will error if the minimal version of Transformers is not installed. Remove at your own risks.
+# check_min_version("4.38.0.dev0")
+
+require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
 logger = get_logger(__name__)
+# You should update this to your particular problem to have better documentation of `model_type`
+MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
+MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+
+
+def save_prefixed_metrics(results, output_dir, file_name: str = "all_results.json", metric_key_prefix: str = "eval"):
+    """
+    Save results while prefixing metric names.
+
+    Args:
+        results: (:obj:`dict`):
+            A dictionary of results.
+        output_dir: (:obj:`str`):
+            An output directory.
+        file_name: (:obj:`str`, `optional`, defaults to :obj:`all_results.json`):
+            An output file name.
+        metric_key_prefix: (:obj:`str`, `optional`, defaults to :obj:`eval`):
+            A metric name prefix.
+    """
+    # Prefix all keys with metric_key_prefix + '_'
+    for key in list(results.keys()):
+        if not key.startswith(f"{metric_key_prefix}_"):
+            results[f"{metric_key_prefix}_{key}"] = results.pop(key)
+
+    with open(os.path.join(output_dir, file_name), "w") as f:
+        json.dump(results, f, indent=4)
+
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Finetune and prune a transformers model on a glue task.")
-
-    # dataset, model, and tokenizer
-    parser.add_argument(
-        "--preprocessing_num_workers",
-        type=int,
-        default=None,
-        help="The number of workers to use for the dataloader.",
-    )
-    parser.add_argument(
-        "--model_name_or_path",
-        default="bert-base-uncased",
-        type=str,
-        help="Path to pretrained model or model identifier from huggingface.co/models.",
-    )
+    parser = argparse.ArgumentParser(description="Finetune a transformers model on a Question Answering task")
     parser.add_argument(
         "--dataset_name",
         type=str,
-        default="squad",
+        default=None,
         help="The name of the dataset to use (via the datasets library).",
     )
     parser.add_argument(
-        "--overwrite_cache",
-        action="store_true",
-        help="Overwrite the cached training and evaluation sets",
+        "--dataset_config_name",
+        type=str,
+        default=None,
+        help="The configuration name of the dataset to use (via the datasets library).",
     )
     parser.add_argument(
-        "--trust_remote_code",
-        action="store_true",
+        "--train_file", type=str, default=None, help="A csv or a json file containing the training data."
+    )
+    parser.add_argument(
+        "--preprocessing_num_workers", type=int, default=1, help="A csv or a json file containing the training data."
+    )
+    parser.add_argument("--do_predict", action="store_true", help="To do prediction on the question answering model")
+    parser.add_argument(
+        "--validation_file", type=str, default=None, help="A csv or a json file containing the validation data."
+    )
+    parser.add_argument(
+        "--test_file", type=str, default=None, help="A csv or a json file containing the Prediction data."
+    )
+    parser.add_argument(
+        "--max_seq_length",
+        type=int,
+        default=384,
         help=(
-            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
-            "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-            "execute code present on the Hub on your local machine."
+            "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
+            " sequences shorter will be padded if `--pad_to_max_lengh` is passed."
         ),
     )
     parser.add_argument(
@@ -77,19 +134,77 @@ def parse_args():
         help="If passed, pad all samples to `max_seq_length`. Otherwise, dynamic padding is used.",
     )
     parser.add_argument(
-        "--cache_dir",
+        "--model_name_or_path",
         type=str,
-        default="./cache",
-        help="Where to download pretrained models and datasets.",
+        help="Path to pretrained model or model identifier from huggingface.co/models.",
+        required=False,
     )
     parser.add_argument(
-        "--max_seq_length",
+        "--config_name",
+        type=str,
+        default=None,
+        help="Pretrained config name or path if not the same as model_name",
+    )
+    parser.add_argument(
+        "--tokenizer_name",
+        type=str,
+        default=None,
+        help="Pretrained tokenizer name or path if not the same as model_name",
+    )
+    parser.add_argument(
+        "--use_slow_tokenizer",
+        action="store_true",
+        help="If passed, will use a slow tokenizer (not backed by the 🤗 Tokenizers library).",
+    )
+    parser.add_argument(
+        "--per_device_train_batch_size",
         type=int,
-        default=384,
-        help=(
-            "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
-            "sequences shorter will be padded if `--pad_to_max_length` is passed."
-        ),
+        default=8,
+        help="Batch size (per device) for the training dataloader.",
+    )
+    parser.add_argument(
+        "--per_device_eval_batch_size",
+        type=int,
+        default=8,
+        help="Batch size (per device) for the evaluation dataloader.",
+    )
+    parser.add_argument(
+        "--learning_rate",
+        type=float,
+        default=5e-5,
+        help="Initial learning rate (after the potential warmup period) to use.",
+    )
+    parser.add_argument("--weight_decay", type=float, default=0.0, help="Weight decay to use.")
+    parser.add_argument("--num_train_epochs", type=int, default=3, help="Total number of training epochs to perform.")
+    parser.add_argument(
+        "--max_train_steps",
+        type=int,
+        default=None,
+        help="Total number of training steps to perform. If provided, overrides num_train_epochs.",
+    )
+    parser.add_argument(
+        "--gradient_accumulation_steps",
+        type=int,
+        default=1,
+        help="Number of updates steps to accumulate before performing a backward/update pass.",
+    )
+    parser.add_argument(
+        "--lr_scheduler_type",
+        type=SchedulerType,
+        default="linear",
+        help="The scheduler type to use.",
+        choices=["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"],
+    )
+    parser.add_argument(
+        "--num_warmup_steps", type=int, default=0, help="Number of steps for the warmup in the lr scheduler."
+    )
+    parser.add_argument("--output_dir", type=str, default=None, help="Where to store the final model.")
+    parser.add_argument("--seed", type=int, default=None, help="A seed for reproducible training.")
+    parser.add_argument(
+        "--doc_stride",
+        type=int,
+        default=128,
+        help="When splitting up a long document into chunks how much stride to take between chunks.",
     )
     parser.add_argument(
         "--n_best_size",
@@ -122,24 +237,53 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--doc_stride",
+        "--max_train_samples",
         type=int,
-        default=128,
-        help="When splitting up a long document into chunks how much stride to take between chunks.",
-    )
-
-    # evaluation and checkpointing
-    parser.add_argument(
-        "--per_device_eval_batch_size", 
-        type=int, 
-        default=256,
-        help="Batch size (per device) for the evaluation dataloader."
+        default=None,
+        help=(
+            "For debugging purposes or quicker training, truncate the number of training examples to this "
+            "value if set."
+        ),
     )
     parser.add_argument(
-        "--output_dir", 
-        type=str, 
-        default=None, 
-        help="Where to store the final model."
+        "--max_eval_samples",
+        type=int,
+        default=None,
+        help=(
+            "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+            "value if set."
+        ),
+    )
+    parser.add_argument(
+        "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets"
+    )
+    parser.add_argument(
+        "--max_predict_samples",
+        type=int,
+        default=None,
+        help="For debugging purposes or quicker training, truncate the number of prediction examples to this",
+    )
+    parser.add_argument(
+        "--model_type",
+        type=str,
+        default=None,
+        help="Model type to use if training from scratch.",
+        choices=MODEL_TYPES,
+    )
+    parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
+    parser.add_argument(
+        "--hub_model_id", type=str, help="The name of the repository to keep in sync with the local `output_dir`."
+    )
+    parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
+    parser.add_argument(
+        "--trust_remote_code",
+        type=bool,
+        default=False,
+        help=(
+            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+            "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
+            "execute code present on the Hub on your local machine."
+        ),
     )
     parser.add_argument(
         "--checkpointing_steps",
@@ -153,59 +297,6 @@ def parse_args():
         default=None,
         help="If the training should continue from a checkpoint folder.",
     )
-
-    # training setups
-    parser.add_argument(
-        "--max_train_steps",
-        type=int,
-        default=None,
-        help="The total number of training steps to perform.",
-    )
-    parser.add_argument(
-        "--gradient_accumulation_steps",
-        type=int,
-        default=1,
-        help="Number of updates steps to accumulate before performing a backward/update pass.",
-    )
-    parser.add_argument(
-        "--per_device_train_batch_size",
-        type=int,
-        default=16,
-        help="Batch size (per device) for the training dataloader.",
-    )
-    parser.add_argument(
-        "--learning_rate",
-        type=float,
-        default=3e-5,
-        help="Initial learning rate (after the potential warmup period) to use.",
-    )
-    parser.add_argument(
-        "--weight_decay", 
-        type=float, 
-        default=0.0,  
-        help="Weight decay to use."
-    )
-    parser.add_argument(
-        "--num_train_epochs", 
-        type=int, 
-        default=3, 
-        help="Total number of training epochs to perform."
-    )
-    parser.add_argument(
-        "--lr_scheduler_type",
-        type=SchedulerType,
-        default="linear",
-        help="The scheduler type to use.",
-        choices=["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"],
-    )
-    parser.add_argument(
-        "--num_warmup_steps", 
-        type=int, 
-        default=0, 
-        help="Number of steps for the warmup in the linear lr scheduler."
-    )
-
-    # wandb logging
     parser.add_argument(
         "--with_tracking",
         action="store_true",
@@ -214,84 +305,107 @@ def parse_args():
     parser.add_argument(
         "--report_to",
         type=str,
-        default="wandb",
+        default="all",
         help=(
             'The integration to report the results and logs to. Supported platforms are `"tensorboard"`,'
-            ' `"wandb"`, `"comet_ml"` and `"clearml"`. Use `"all"` (default) to report to all integrations.'
+            ' `"wandb"`, `"comet_ml"` and `"clearml"`. Use `"all"` (default) to report to all integrations. '
             "Only applicable when `--with_tracking` is passed."
         ),
     )
+
+    # log 
     parser.add_argument(
-        "--wandb_project", 
-        type=str, 
-        default="SQuAD_BERT_BASE", 
-        help="The wandb project to log to."
+        "--log_param_stat_interval",
+        type=int,
+        default=None,
+        help="Interval to log the parameter statistics."
     )
     parser.add_argument(
-        "--wandb_name", 
-        type=str, 
-        default=None, 
-        help="The wandb run name."
-    )
-    
-    # reproducibility
-    parser.add_argument(
-        "--seed", 
-        type=int, 
-        default=47, 
-        help="Random seed to use for reproducibility."
+        "--wandb_project_name",
+        type=str,
+        default="squad_bert",
+        help="The name of the wandb project."
     )
 
     # cubic pruning scheduler
-    parser.add_argument("--final_ratio",        type=float, default=0.2, help="The final ratio of the remaining weights.")
-    parser.add_argument("--initial_ratio",      type=float, default=1,   help="The initial ratio of the remaining weights.")
-    parser.add_argument("--initial_warmup",     type=int,   default=5400,   help="The number of training batches/steps for initial warmup.")
-    parser.add_argument("--final_warmup",       type=int,   default=22000,   help="The number of training batches/steps for final warmup.")
-    parser.add_argument("--deltaT",             type=int,   default=10,  help="The interval to mask weights.")
+    parser.add_argument("--final_ratio",        type=float, default=0.1,   help="The final ratio of the remaining weights.")
+    parser.add_argument("--initial_ratio",      type=float, default=1.0,   help="The initial ratio of the remaining weights.")
+    parser.add_argument("--initial_warmup",     type=int,   default=1,     help="The number of training batches/steps for initial warmup.")
+    parser.add_argument("--final_warmup",       type=int,   default=0,     help="The number of training batches/steps for final warmup.")
+    parser.add_argument("--deltaT",             type=int,   default=10,    help="The interval to mask weights.")
 
-    # PMGP
-    parser.add_argument("--sigma0",             type=float, default=1e-15, help="The smaller variance of the Mixture Gaussian prior.")
-    parser.add_argument("--sigma1",             type=float, default=0.1,   help="The larger variance of the Mixture Gaussian prior.")
+    # BReg
+    parser.add_argument("--sigma0",             type=float, default=1e-13, help="The smaller variance of the Mixture Gaussian prior.")
+    parser.add_argument("--alpha_i_sigma0",     type=float, default=1.0,   help="The initial factor value of the sigma0.")
+    parser.add_argument("--alpha_f_sigma0",     type=float, default=1.0,   help="The final factor value of the sigma0.")
+
+    parser.add_argument("--sigma1",             type=float, default=0.05,  help="The larger variance of the Mixture Gaussian prior.")
+    parser.add_argument("--alpha_i_sigma1",     type=float, default=1.0,   help="The initial factor value of the sigma1.")
+    parser.add_argument("--alpha_f_sigma1",     type=float, default=1.0,   help="The final factor value of the sigma1.")
+    
     parser.add_argument("--lambda_mix",         type=float, default=1e-3,  help="The mixing coefficient of the Mixture Gaussian prior.")
     parser.add_argument("--alpha_i_lambda",     type=float, default=1.0,   help="The initial factor value of the lambda_mix.")
     parser.add_argument("--alpha_f_lambda",     type=float, default=0.01,  help="The final factor value of the lambda_mix.")
-    parser.add_argument("--anneal_start_lambda",type=int,   default=None,  help="The number of traing batches/steps for lambda_mix annealing to start.")
-    parser.add_argument("--anneal_end_lambda",  type=int,   default=None,  help="The number of traing batches/steps for lambda_mix annealing to end.")
-    parser.add_argument("--masking_value",      type=float, default=0.0,   help="The masking value for the pruned weights.")
-    parser.add_argument('--non_prior_name',     
+
+    parser.add_argument("--anneal_start",       type=int,   default=None,  help="The number of traing batches/steps for lambda_mix annealing to start.")
+    parser.add_argument("--anneal_end",         type=int,   default=None,  help="The number of traing batches/steps for lambda_mix annealing to end.")
+
+    parser.add_argument("--deltaT_cooldown",    type=int,   default=10,    help="The interval to mask weights.")
+    parser.add_argument("--sparse_fine_tune",   type=int,   default=0,     help="The number of training batches/steps for sparse fine-tuning.")
+
+    parser.add_argument("--masking_value",      type=float, default=0.0,   help="The filling value of the masked weights.")
+    parser.add_argument('--non_prior_name',
                         type=str,
-                        default=["layernorm", "classifier", "pooler", "embedding", "bias"],
+                        default=None,
                         nargs='+',
-                        help="The names of the modules that should not be penalized by the prior.")
+                        help="The names of the modules that should not be penalized by the prior, if any. We will match the names using regex.")
+    parser.add_argument(
+        '--init_prior_in_cooldown',
+        action='store_true',
+        help="If passed, will use the initial prior setting during the cubic prune cooldown period."
+    )
 
-    # PLATON
-    parser.add_argument("--beta1", type=float, default=0.85, help="The beta1 of PLATON pruner.")
-    parser.add_argument("--beta2", type=float, default=0.975, help="The beta2 of PLATON pruner.")
-
-    # pruning algorithm selection
     parser.add_argument(
         '--non_mask_name', 
-        nargs='+', 
+        nargs='+',
         type=str, 
-        default=["layernorm", "classifier", "pooler", "embedding"],
+        default=["layernorm", "classifier", "pooler", "embedding", "bias", "prediction"],
         help="The names of the modules that should not be pruned. We will match the names using regex."
-    )
-    parser.add_argument(
-        "--pruner", 
-        type=str, 
-        default="PMGP", 
-        help="The pruner to use.", 
-        choices=["PMGP", "PLATON"]
     )
 
     args = parser.parse_args()
 
-    return args
-    
-def main():
+    # Sanity checks
+    if (
+        args.dataset_name is None
+        and args.train_file is None
+        and args.validation_file is None
+        and args.test_file is None
+    ):
+        raise ValueError("Need either a dataset name or a training/validation/test file.")
+    else:
+        if args.train_file is not None:
+            extension = args.train_file.split(".")[-1]
+            assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+        if args.validation_file is not None:
+            extension = args.validation_file.split(".")[-1]
+            assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+        if args.test_file is not None:
+            extension = args.test_file.split(".")[-1]
+            assert extension in ["csv", "json"], "`test_file` should be a csv or a json file."
 
-    # Parse args
+    if args.push_to_hub:
+        assert args.output_dir is not None, "Need an `output_dir` to create a repo when `--push_to_hub` is passed."
+
+    return args
+
+
+def main():
     args = parse_args()
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_qa_no_trainer", args)
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
@@ -322,37 +436,97 @@ def main():
     if args.seed is not None:
         set_seed(args.seed)
 
+    # Handle the repository creation
+    if accelerator.is_main_process:
+        if args.push_to_hub:
+            # Retrieve of infer repo_name
+            repo_name = args.hub_model_id
+            if repo_name is None:
+                repo_name = Path(args.output_dir).absolute().name
+            # Create repo and retrieve repo_id
+            repo_id = create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
+            # Clone repo locally
+            repo = Repository(args.output_dir, clone_from=repo_id, token=args.hub_token)
+
+            with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
+                if "step_*" not in gitignore:
+                    gitignore.write("step_*\n")
+                if "epoch_*" not in gitignore:
+                    gitignore.write("epoch_*\n")
+        elif args.output_dir is not None:
+            os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
 
-    # Load dataset
-    raw_datasets = load_dataset(
-        args.dataset_name,
-        cache_dir=args.cache_dir,        
-        trust_remote_code=args.trust_remote_code,
-    )
+    # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
+    # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
+    # (the dataset will be downloaded automatically from the datasets Hub).
+    #
+    # For CSV/JSON files, this script will use the column called 'text' or the first column if no column called
+    # 'text' is found. You can easily tweak this behavior (see below).
+    #
+    # In distributed training, the load_dataset function guarantee that only one local process can concurrently
+    # download the dataset.
+    if args.dataset_name is not None:
+        # Downloading and loading a dataset from the hub.
+        raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name)
+    else:
+        data_files = {}
+        if args.train_file is not None:
+            data_files["train"] = args.train_file
+            extension = args.train_file.split(".")[-1]
+        if args.validation_file is not None:
+            data_files["validation"] = args.validation_file
+            extension = args.validation_file.split(".")[-1]
+        if args.test_file is not None:
+            data_files["test"] = args.test_file
+            extension = args.test_file.split(".")[-1]
+        raw_datasets = load_dataset(extension, data_files=data_files, field="data")
+    # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
-    config = AutoConfig.from_pretrained(
-        args.model_name_or_path,
-        cache_dir=args.cache_dir,
-        trust_remote_code=args.trust_remote_code
-    )
-    tokenizer = AutoTokenizer.from_pretrained(
-        args.model_name_or_path,
-        cache_dir=args.cache_dir,
-        use_fast=True, 
-        trust_remote_code=args.trust_remote_code
-    )
-    model = AutoModelForQuestionAnswering.from_pretrained(
-        args.model_name_or_path,
-        config=config,
-        trust_remote_code=args.trust_remote_code,
-        cache_dir=args.cache_dir,
-    )
+    # Load pretrained model and tokenizer
+    #
+    # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
+    # download model & vocab.
+
+    if args.config_name:
+        config = AutoConfig.from_pretrained(args.config_name, trust_remote_code=args.trust_remote_code)
+    elif args.model_name_or_path:
+        config = AutoConfig.from_pretrained(args.model_name_or_path, trust_remote_code=args.trust_remote_code)
+    else:
+        config = CONFIG_MAPPING[args.model_type]()
+        logger.warning("You are instantiating a new config instance from scratch.")
+
+    if args.tokenizer_name:
+        tokenizer = AutoTokenizer.from_pretrained(
+            args.tokenizer_name, use_fast=True, trust_remote_code=args.trust_remote_code
+        )
+    elif args.model_name_or_path:
+        tokenizer = AutoTokenizer.from_pretrained(
+            args.model_name_or_path, use_fast=True, trust_remote_code=args.trust_remote_code
+        )
+    else:
+        raise ValueError(
+            "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
+            "You can do it from another script, save it, and load it from here, using --tokenizer_name."
+        )
+
+    if args.model_name_or_path:
+        model = AutoModelForQuestionAnswering.from_pretrained(
+            args.model_name_or_path,
+            from_tf=bool(".ckpt" in args.model_name_or_path),
+            config=config,
+            trust_remote_code=args.trust_remote_code,
+        )
+    else:
+        logger.info("Training new model from scratch")
+        model = AutoModelForQuestionAnswering.from_config(config, trust_remote_code=args.trust_remote_code)
 
     # Preprocessing the datasets.
     # Preprocessing is slighlty different for training and evaluation.
 
     column_names = raw_datasets["train"].column_names
+
     question_column_name = "question" if "question" in column_names else column_names[0]
     context_column_name = "context" if "context" in column_names else column_names[1]
     answer_column_name = "answers" if "answers" in column_names else column_names[2]
@@ -446,8 +620,13 @@ def main():
 
         return tokenized_examples
 
-
+    if "train" not in raw_datasets:
+        raise ValueError("--do_train requires a train dataset")
     train_dataset = raw_datasets["train"]
+    if args.max_train_samples is not None:
+        # We will select sample from whole data if agument is specified
+        train_dataset = train_dataset.select(range(args.max_train_samples))
+
     # Create train feature from dataset
     with accelerator.main_process_first():
         train_dataset = train_dataset.map(
@@ -458,6 +637,9 @@ def main():
             load_from_cache_file=not args.overwrite_cache,
             desc="Running tokenizer on train dataset",
         )
+        if args.max_train_samples is not None:
+            # Number of samples might increase during Feature Creation, We select only specified max samples
+            train_dataset = train_dataset.select(range(args.max_train_samples))
 
     # Validation preprocessing
     def prepare_validation_features(examples):
@@ -506,7 +688,12 @@ def main():
 
         return tokenized_examples
 
+    if "validation" not in raw_datasets:
+        raise ValueError("--do_eval requires a validation dataset")
     eval_examples = raw_datasets["validation"]
+    if args.max_eval_samples is not None:
+        # We will select sample from whole data
+        eval_examples = eval_examples.select(range(args.max_eval_samples))
     # Validation Feature Creation
     with accelerator.main_process_first():
         eval_dataset = eval_examples.map(
@@ -517,6 +704,31 @@ def main():
             load_from_cache_file=not args.overwrite_cache,
             desc="Running tokenizer on validation dataset",
         )
+
+    if args.max_eval_samples is not None:
+        # During Feature creation dataset samples might increase, we will select required samples again
+        eval_dataset = eval_dataset.select(range(args.max_eval_samples))
+
+    if args.do_predict:
+        if "test" not in raw_datasets:
+            raise ValueError("--do_predict requires a test dataset")
+        predict_examples = raw_datasets["test"]
+        if args.max_predict_samples is not None:
+            # We will select sample from whole data
+            predict_examples = predict_examples.select(range(args.max_predict_samples))
+        # Predict Feature Creation
+        with accelerator.main_process_first():
+            predict_dataset = predict_examples.map(
+                prepare_validation_features,
+                batched=True,
+                num_proc=args.preprocessing_num_workers,
+                remove_columns=column_names,
+                load_from_cache_file=not args.overwrite_cache,
+                desc="Running tokenizer on prediction dataset",
+            )
+            if args.max_predict_samples is not None:
+                # During Feature creation dataset samples might increase, we will select required samples again
+                predict_dataset = predict_dataset.select(range(args.max_predict_samples))
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):
@@ -541,6 +753,12 @@ def main():
     eval_dataloader = DataLoader(
         eval_dataset_for_model, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
     )
+
+    if args.do_predict:
+        predict_dataset_for_model = predict_dataset.remove_columns(["example_id", "offset_mapping"])
+        predict_dataloader = DataLoader(
+            predict_dataset_for_model, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
+        )
 
     # Post-processing:
     def post_processing_function(examples, features, predictions, stage="eval"):
@@ -627,8 +845,10 @@ def main():
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler_type,
         optimizer=optimizer,
-        num_warmup_steps=args.num_warmup_steps * args.gradient_accumulation_steps,
-        num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
+        num_warmup_steps=args.num_warmup_steps * accelerator.num_processes,
+        num_training_steps=args.max_train_steps
+        if overrode_max_train_steps
+        else args.max_train_steps * accelerator.num_processes,
     )
 
     # Prepare everything with our `accelerator`.
@@ -654,16 +874,54 @@ def main():
         experiment_config = vars(args)
         # TensorBoard cannot log Enums, need the raw value
         experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
-        #accelerator.init_trackers("qa_no_trainer", experiment_config)
-        accelerator.init_trackers(
-            project_name=args.wandb_project,
-            run_name=args.wandb_name,
-            config=experiment_config,
-        )
+        #############################
+        #                           #
+        #      Flexible tracker     #
+        #                           #
+        #############################
+        accelerator.init_trackers(project_name=args.wandb_project_name,
+                                  config=experiment_config,
+                                 )
 
+
+    ############################
+    #                          #
+    #      Init the pruner     #
+    #                          #
+    ############################
+    pruner = BReg(
+        train_size=len(train_dataset), 
+        max_train_steps=args.max_train_steps,
+        sigma0=args.sigma0,
+        alpha_i_sigma0=args.alpha_i_sigma0,
+        alpha_f_sigma0=args.alpha_f_sigma0,
+        sigma1=args.sigma1,
+        alpha_i_sigma1=args.alpha_i_sigma1,
+        alpha_f_sigma1=args.alpha_f_sigma1,
+        lambda_mix=args.lambda_mix,
+        alpha_i_lambda=args.alpha_i_lambda, 
+        alpha_f_lambda=args.alpha_f_lambda,
+        anneal_start=args.anneal_start, 
+        anneal_end=args.anneal_end,
+        final_ratio=args.final_ratio, 
+        initial_ratio=args.initial_ratio,
+        initial_warmup=args.initial_warmup, 
+        final_warmup=args.final_warmup, 
+        deltaT=args.deltaT,
+        deltaT_cooldown=args.deltaT_cooldown,
+        sparse_fine_tune=args.sparse_fine_tune,
+        masking_value=args.masking_value, 
+        non_mask_name=args.non_mask_name, 
+        non_prior_name=args.non_prior_name,
+        clipping_threshold=None,
+        init_prior_in_cooldown=args.init_prior_in_cooldown,
+        log_param_stat_interval=args.log_param_stat_interval,
+    )
+    pruner.print_pruning_modules(model)
 
     # Train!
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
+
     logger.info("***** Running training *****")
     logger.info(f"  Num examples = {len(train_dataset)}")
     logger.info(f"  Num Epochs = {args.num_train_epochs}")
@@ -689,7 +947,12 @@ def main():
             path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
             checkpoint_path = path
             path = os.path.basename(checkpoint_path)
-        
+
+        ############################
+        #                          #
+        #      Fixed some bugs     #
+        #                          #
+        ############################
         accelerator.print(f"Resumed from checkpoint: {checkpoint_path}")
         accelerator.load_state(checkpoint_path)
         # Extract `epoch_{i}` or `step_{i}`
@@ -727,7 +990,43 @@ def main():
                     total_loss += loss.detach().float()
 
                 accelerator.backward(loss)
+                ##########################################################
+                #                                                        #
+                # Step 2: Gradually add-in/anneal prior during training  #
+                #                                                        #
+                ##########################################################
+                if completed_steps <= pruner.cubic_prune_end:
+                    prior_threshold, sigma0, sigma1, lambda_mix = pruner.add_prior_grad(model, completed_steps)
+                    if args.with_tracking:
+                        accelerator.log(
+                            {
+                                "sigma0": float(sigma0),
+                                "sigma1": float(sigma1),
+                                "lambda_mix": float(lambda_mix),
+                                "prior_threshold": float(prior_threshold)
+                            },
+                            step=completed_steps,
+                        )
                 optimizer.step()
+                if pruner.log_param_stat_interval is not None and completed_steps % pruner.log_param_stat_interval == 0:
+                    stats = pruner.param_dist_stats(model)
+                    if args.with_tracking:
+                        accelerator.log(stats, step=completed_steps)
+                ratio, mask_threshold = pruner.magnitude_pruning(model, completed_steps)
+                if args.with_tracking:
+                    accelerator.log(
+                        {
+                            "remaining_ratio": ratio,
+                        },
+                        step=completed_steps,
+                    )
+                    if mask_threshold is not None:
+                        accelerator.log(
+                            {
+                                "mask_threshold": mask_threshold,
+                            },
+                            step=completed_steps,
+                        )
                 lr_scheduler.step()
                 optimizer.zero_grad()
 
