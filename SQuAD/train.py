@@ -884,11 +884,11 @@ def main():
                                  )
 
 
-    ############################
-    #                          #
-    #      Init the pruner     #
-    #                          #
-    ############################
+    ################################
+    #                              #
+    #   Step 1: Init the pruner    #
+    #                              #
+    ################################
     pruner = BReg(
         train_size=len(train_dataset), 
         max_train_steps=args.max_train_steps,
@@ -990,11 +990,11 @@ def main():
                     total_loss += loss.detach().float()
 
                 accelerator.backward(loss)
-                ##########################################################
-                #                                                        #
-                # Step 2: Gradually add-in/anneal prior during training  #
-                #                                                        #
-                ##########################################################
+                ###########################################################
+                #                                                         #
+                #   Step 2: Gradually anneal the prior during training    #
+                #                                                         #
+                ###########################################################
                 if completed_steps <= pruner.cubic_prune_end:
                     prior_threshold, sigma0, sigma1, lambda_mix = pruner.add_prior_grad(model, completed_steps)
                     if args.with_tracking:
@@ -1008,6 +1008,11 @@ def main():
                             step=completed_steps,
                         )
                 optimizer.step()
+                ######################################################
+                #                                                    #
+                #    Step 3: prune with the cubic prune scheduler    #                                
+                #                                                    #
+                ######################################################
                 if pruner.log_param_stat_interval is not None and completed_steps % pruner.log_param_stat_interval == 0:
                     stats = pruner.param_dist_stats(model)
                     if args.with_tracking:
