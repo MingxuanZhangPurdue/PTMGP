@@ -329,6 +329,12 @@ def parse_args():
 
     # GBReg
     parser.add_argument(
+        "--train_size_coefficient",
+        type=float,
+        default=1.0,
+        help="The coefficient of the train size."
+    )
+    parser.add_argument(
         "--sigma0",             
         type=float,            
         default=1e-15, 
