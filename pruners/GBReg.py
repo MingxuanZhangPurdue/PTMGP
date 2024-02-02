@@ -419,3 +419,4 @@ class GBReg(Algorithm):
                 state.timestamp.batch.value < self.cubic_prune_start and
                 state.timestamp.batch.value % self.param_magnitude_stat_log_interval == 0):
                 magnitude_stat = self.magnitude_stat(state.model)
+                logger.log_metrics(magnitude_stat)
