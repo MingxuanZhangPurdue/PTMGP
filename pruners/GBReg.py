@@ -341,7 +341,15 @@ class GBReg(Algorithm):
         magnitude_stat["avg"] = float(magnitude_vector.mean())
         magnitude_stat["std"] = float(magnitude_vector.std())
         return magnitude_stat
-
+    
+    def calculate_n_param_below_prior_threshold(self, model, prior_threshold):
+        n_param = 0
+        with torch.no_grad():
+            for n, p in model.named_parameters():
+                if self.whether_mask_para(n):
+                    n_param += (p.abs() <= prior_threshold).sum().item()
+        return n_param
+    
     def print_pruning_modules(self, model):
         print ("list of model modules to be pruned:")
         for n, _ in model.named_parameters():
@@ -399,3 +407,8 @@ class GBReg(Algorithm):
                 else:
                     magnitude_stat = self.magnitude_stat(state.model, self.current_mask)
                 logger.log_metrics(magnitude_stat)
+            # log the number of parameters in the high penalty region, i.e., the spike region
+            if self.spike_region_log_interval is not None and state.timestamp.batch.value % self.spike_region_log_interval == 0 and mask is None:
+                prior_threshold, _, _, _ = self.calculate_prior_grad_components(state.timestamp.batch.value)
+                n_param_below_prior_threshold = self.calculate_n_param_below_prior_threshold(state.model, prior_threshold)
+                logger.log_metrics({"n_param_below_prior_threshold": int(n_param_below_prior_threshold)})
