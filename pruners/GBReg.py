@@ -86,6 +86,7 @@ class GBReg(Algorithm):
 
         self.final_ratio_mask_after_initial_warmup = None
         self.current_mask = None
+        self.current_ratio = 1.0
 
         self.train_size = train_size
         self.max_train_steps = max_train_steps
@@ -342,12 +343,14 @@ class GBReg(Algorithm):
         return magnitude_stat
     
     def calculate_n_param_below_prior_threshold(self, model, prior_threshold):
-        n_param = 0
+        n = 0
+        n_below_prior_threshold = 0
         with torch.no_grad():
             for n, p in model.named_parameters():
                 if self.whether_mask_para(n):
-                    n_param += (p.abs() <= prior_threshold).sum().item()
-        return n_param
+                    n += p.numel()
+                    n_below_prior_threshold += (p.abs() <= prior_threshold).sum().item()
+        return n_below_prior_threshold, n_below_prior_threshold/n
     
     def print_pruning_modules(self, model):
         print ("list of model modules to be pruned:")
@@ -379,8 +382,9 @@ class GBReg(Algorithm):
                     state.timestamp.batch.value > self.cubic_prune_start and
                     state.timestamp.batch.value < self.cubic_prune_end and
                     (state.timestamp.batch.value-1) % self.deltaT == 0):
-                    n_param_below_prior_threshold = self.calculate_n_param_below_prior_threshold(state.model, prior_threshold)
-                    logger.log_metrics({"n_param_below_prior_threshold": int(n_param_below_prior_threshold)})
+                    n_below_prior_threshold, percent_below_prior_threshold = self.calculate_n_param_below_prior_threshold(state.model, prior_threshold)
+                    logger.log_metrics({"n_param_below_prior_threshold": int(n_below_prior_threshold)})
+                    logger.log_metrics({"percent_left_in_spike_region": float(percent_below_prior_threshold/self.current_ratio)})
             # perform gradient clipping during the final warmup stage if no prior regularization is imposed
             if state.timestamp.batch.value > self.cubic_prune_end and self.final_warmup_prior_config == "none" and self.clipping_threshold is not None:
                 grad_norm = self.gradient_clipping(state.model)
@@ -402,6 +406,7 @@ class GBReg(Algorithm):
             logger.log_metrics({"remaining_ratio": float(ratio)})
             # if the current mask is not None, update the current mask
             if mask is not None:
+                self.current_ratio = ratio
                 self.current_mask = mask
             # if the current mask threshold is not None, log the current mask threshold
             if mask_threshold is not None:
