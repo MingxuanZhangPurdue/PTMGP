@@ -33,6 +33,7 @@ class GBReg(Algorithm):
             train_size,
             # total number of training steps
             max_train_steps,
+            train_size_coefficient=1.0,
             # sigma0 annealing configuration
             sigma0=1e-15, # initial value of sigma0
             alpha_i_sigma0=1.0, # initial value of alpha (factor) for sigma0
@@ -90,6 +91,7 @@ class GBReg(Algorithm):
 
         self.train_size = train_size
         self.max_train_steps = max_train_steps
+        self.effective_train_size = train_size_coefficient*train_size
 
         self.param_magnitude_stat_log_interval = param_magnitude_stat_log_interval
         self.mask_update_log_interval = mask_update_log_interval
@@ -155,6 +157,7 @@ class GBReg(Algorithm):
         return self(
             train_size=train_size,
             max_train_steps=max_train_steps,
+            train_size_coefficient=args.train_size_coefficient,
             sigma0=args.sigma0,
             alpha_i_sigma0=args.alpha_i_sigma0,
             alpha_f_sigma0=args.alpha_f_sigma0,
@@ -242,7 +245,7 @@ class GBReg(Algorithm):
             for n, p in model.named_parameters():
                 if self.whether_penalize_para(n):
                     temp = p.pow(2).mul(c2).add(c1).exp().add(1).pow(-1)
-                    temp = temp.mul((sigma0-sigma1)/(self.train_size*sigma0*sigma1)).add((-1)/(self.train_size*sigma1))
+                    temp = temp.mul((sigma0-sigma1)/(self.effective_train_size*sigma0*sigma1)).add((-1)/(self.effective_train_size*sigma1))
                     p.grad -= p.mul(temp)
         return prior_threshold, sigma0, sigma1, lambda_mix
     
@@ -412,9 +415,7 @@ class GBReg(Algorithm):
             if mask_threshold is not None:
                 logger.log_metrics({"mask_threshold": float(mask_threshold)})
             # log the parameter's magnitude statistics
-            if self.param_magnitude_stat_log_interval is not None and state.timestamp.batch.value % self.param_magnitude_stat_log_interval == 0:
-                if state.timestamp.batch.value < self.cubic_prune_start:
-                    magnitude_stat = self.magnitude_stat(state.model)
-                else:
-                    magnitude_stat = self.magnitude_stat(state.model, self.current_mask)
-                logger.log_metrics(magnitude_stat)
+            if (self.param_magnitude_stat_log_interval is not None and
+                state.timestamp.batch.value < self.cubic_prune_start and
+                state.timestamp.batch.value % self.param_magnitude_stat_log_interval == 0):
+                magnitude_stat = self.magnitude_stat(state.model)
