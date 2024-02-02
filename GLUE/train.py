@@ -680,8 +680,8 @@ def main():
         # callbacks
         callbacks=[LRMonitor(), RuntimeEstimator()],
 
-        # algorithms. Both PLATON and oBERT use gradient clipping.
-        algorithms=[pruner_algorithm] if args.pruner == "BReg" else [gc, pruner_algorithm],
+        # algorithms
+        algorithms=[pruner_algorithm] if args.pruner == "GBReg" else [gc, pruner_algorithm],
 
         # checkpointing
         run_name=args.run_name,
