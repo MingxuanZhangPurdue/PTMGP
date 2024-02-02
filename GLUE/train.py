@@ -28,7 +28,7 @@ from composer.loggers import WandBLogger
 from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler, CosineAnnealingWarmRestartsScheduler
 
 from pruners.PLATON import PLATON
-from pruners.BReg import BReg
+from pruners.GBReg import GBReg
 from pruners.utils_composer import LinearWithRewindsScheduler
 
 task_to_keys = {
@@ -183,12 +183,6 @@ def parse_args():
 
     # evaluation
     parser.add_argument(
-        "--log_param_stat_interval",
-        type=my_custom_type,
-        default=None,
-        help="Interval to log the parameter statistics."
-    )
-    parser.add_argument(
         "--eval_interval", 
         type=my_custom_type, 
         default="1ep",
@@ -246,7 +240,7 @@ def parse_args():
         type=str,
         default="linear",
         help="The lr scheduler to use.",
-        choices=["linear", "cosine", "linear_with_rewinds"],
+        choices=["linear", "linear_with_rewinds"],
     )
     parser.add_argument(
         "--t_warmup", 
@@ -259,18 +253,6 @@ def parse_args():
         type=float,
         default=0.1, 
         help="Final learning rate multiplier for lr scheduler."
-    )
-    parser.add_argument(
-        "--t_0",
-        type=str,
-        default="6ep",
-        help="Number of steps for the first cycle in the cosine lr scheduler."
-    )
-    parser.add_argument(
-        "--t_mult",
-        type=float,
-        default=1,
-        help="Number of cycles for the cosine lr scheduler."
     )
     parser.add_argument(
         "--rewind_interval",
@@ -293,13 +275,13 @@ def parse_args():
 
     # wandb logging
     parser.add_argument(
-        "--wandb_project", 
+        "--wandb_project_name", 
         type=str, 
         default=None, 
-        help="The wandb project to log to."
+        help="The name of the wandb project to log to."
     )
     parser.add_argument(
-        "--wandb_name", 
+        "--wandb_run_name", 
         type=str, 
         default=None, 
         help="The wandb run name."
@@ -314,41 +296,150 @@ def parse_args():
     )
 
     # cubic pruning scheduler
-    parser.add_argument("--final_ratio",        type=float,            default=0.1,   help="The final ratio of the remaining weights.")
-    parser.add_argument("--initial_ratio",      type=float,            default=1,     help="The initial ratio of the remaining weights.")
-    parser.add_argument("--initial_warmup",     type=my_custom_type,   default=1,     help="The number of training batches/steps for initial warmup.")
-    parser.add_argument("--final_warmup",       type=my_custom_type,   default=0,     help="The number of training batches/steps for final warmup.")
-    parser.add_argument("--deltaT",             type=my_custom_type,   default=10,    help="The interval to mask weights.")
-
-    # BReg
-    parser.add_argument("--sigma0",             type=float,            default=1e-13, help="The smaller variance of the Mixture Gaussian prior.")
-    parser.add_argument("--alpha_i_sigma0",     type=float,            default=1.0,   help="The initial factor value of the sigma0.")
-    parser.add_argument("--alpha_f_sigma0",     type=float,            default=1.0,   help="The final factor value of the sigma0.")
-
-    parser.add_argument("--sigma1",             type=float,            default=0.05,  help="The larger variance of the Mixture Gaussian prior.")
-    parser.add_argument("--alpha_i_sigma1",     type=float,            default=1.0,   help="The initial factor value of the sigma1.")
-    parser.add_argument("--alpha_f_sigma1",     type=float,            default=1.0,   help="The final factor value of the sigma1.")
-    
-    parser.add_argument("--lambda_mix",         type=float,            default=1e-3,  help="The mixing coefficient of the Mixture Gaussian prior.")
-    parser.add_argument("--alpha_i_lambda",     type=float,            default=1.0,   help="The initial factor value of the lambda_mix.")
-    parser.add_argument("--alpha_f_lambda",     type=float,            default=0.01,  help="The final factor value of the lambda_mix.")
-
-    parser.add_argument("--anneal_start",       type=my_custom_type,   default=None,  help="The number of traing batches/steps for lambda_mix annealing to start.")
-    parser.add_argument("--anneal_end",         type=my_custom_type,   default=None,  help="The number of traing batches/steps for lambda_mix annealing to end.")
-
-    parser.add_argument("--masking_value",      type=float,            default=0.0,   help="The filling value of the masked weights.")
-    parser.add_argument('--non_prior_name',
-                        type=str,
-                        default=None,
-                        nargs='+',
-                        help="The names of the modules that should not be penalized by the prior, if any. We will match the names using regex.")
     parser.add_argument(
-        '--init_prior_in_cooldown',
-        action='store_true',
-        help="If passed, will use the initial prior setting during the cubic prune cooldown period."
+        "--initial_ratio",      
+        type=float,            
+        default=1.0,     
+        help="The initial ratio of the remaining weights."
     )
-    parser.add_argument("--deltaT_cooldown",    type=my_custom_type,   default=10,    help="The interval to mask weights.")
-    parser.add_argument("--sparse_fine_tune",   type=my_custom_type,   default=0,     help="The number of training batches/steps for sparse fine-tuning.")
+    parser.add_argument(
+        "--final_ratio",        
+        type=float,            
+        default=0.1,   
+        help="The final ratio of the remaining weights."
+    )
+    parser.add_argument(
+        "--initial_warmup_steps",    
+          type=my_custom_type,   
+          default=0, 
+          help="The number of training batches/steps for initial warmup."
+    )
+    parser.add_argument(
+        "--final_warmup_steps",       
+        type=my_custom_type,   
+        default=0,     
+        help="The number of training batches/steps for final warmup."
+    )
+    parser.add_argument(
+        "--deltaT",             
+        type=my_custom_type,   
+        default=10,    
+        help="The masking horizon for the cubic pruning scheduler."
+    )
+
+    # GBReg
+    parser.add_argument(
+        "--sigma0",             
+        type=float,            
+        default=1e-15, 
+        help="The smaller variance of the Mixture Gaussian prior."
+    )
+    parser.add_argument(
+        "--alpha_i_sigma0",     
+        type=float,            
+        default=1.0,   
+        help="The initial factor value of the sigma0."
+    )
+    parser.add_argument(
+        "--alpha_f_sigma0",     
+        type=float,            
+        default=1.0,   
+        help="The final factor value of the sigma0."
+    )
+    parser.add_argument(
+        "--anneal_start_sigma0",
+        type=my_custom_type,
+        default=None,
+        help="The number of traing batches/steps for sigma0 annealing to start."
+    )
+    parser.add_argument(
+        "--anneal_end_sigma0",
+        type=my_custom_type,
+        default=None,
+        help="The number of traing batches/steps for sigma0 annealing to end."
+    )
+
+    parser.add_argument(
+        "--sigma1",             
+        type=float,            
+        default=0.1,   
+        help="The larger variance of the Mixture Gaussian prior."
+    )
+    parser.add_argument(
+        "--alpha_i_sigma1",     
+        type=float,            
+        default=1.0,   
+        help="The initial factor value of the sigma1."
+    )
+    parser.add_argument(
+        "--alpha_f_sigma1",     
+        type=float,            
+        default=1.0,   
+        help="The final factor value of the sigma1."
+    )
+    parser.add_argument(
+        "--anneal_start_sigma1",
+        type=my_custom_type,
+        default=None,
+        help="The number of traing batches/steps for sigma1 annealing to start."
+    )
+    parser.add_argument(
+        "--anneal_end_sigma1",
+        type=my_custom_type,
+        default=None,
+        help="The number of traing batches/steps for sigma1 annealing to end."
+    )
+    
+    parser.add_argument(
+        "--lambda_mix",         
+        type=float,            
+        default=1e-4,  
+        help="The mixing coefficient of the Mixture Gaussian prior."
+    )
+    parser.add_argument(
+        "--alpha_i_lambda_mix",    
+        type=float,            
+        default=1.0,   
+        help="The initial factor value of the lambda_mix."
+    )
+    parser.add_argument(
+        "--alpha_f_lambda_mix",     
+        type=float,            
+        default=1.0,   
+        help="The final factor value of the lambda_mix."
+    )
+    parser.add_argument(
+        "--anneal_start_lambda_mix",       
+        type=my_custom_type,   
+        default=None,  
+        help="The number of traing batches/steps for lambda_mix annealing to start."
+    )
+    parser.add_argument(
+        "--anneal_end_lambda_mix",         
+        type=my_custom_type,  
+        default=None,  
+        help="The number of traing batches/steps for lambda_mix annealing to end."
+    )
+
+    parser.add_argument(
+        '--non_prior_name',
+        type=str,
+        default=None,
+        nargs='+',
+        help="The names of the modules that should not be penalized by the prior, if any. We will match the names using regex."
+    )
+    parser.add_argument(
+        "--final_warmup_prior_config",
+        type=str,
+        default="none",
+        choices=["none", "annealed", "initial"],
+        help="The final warmup prior configuration.",
+    )
+    parser.add_argument(
+        "--deltaT_final_warmup", 
+        type=my_custom_type,  
+        default=1,    
+        help="masking horizon for the final warmup stage.")
 
     # PLATON
     parser.add_argument(
@@ -373,9 +464,15 @@ def parse_args():
     parser.add_argument(
         "--pruner", 
         type=str, 
-        default="BReg", 
+        default="GBReg", 
         help="The pruner to use.", 
-        choices=["PLATON", "BReg"]
+        choices=["PLATON", "GBReg"]
+    )
+    parser.add_argument(
+        "--masking_value",      
+        type=float,            
+        default=0.0,   
+        help="The filling value of the masked weights."
     )
 
     args = parser.parse_args()
@@ -523,12 +620,6 @@ def main():
             t_warmup=args.t_warmup,
             alpha_f=args.alpha_f
         )
-    elif args.lr_scheduler == "cosine":
-        lr_scheduler = CosineAnnealingWarmRestartsScheduler(
-            t_0=args.t_0,
-            t_mult=args.t_mult,
-            alpha_f=args.alpha_f
-        )
     elif args.lr_scheduler == "linear_with_rewinds":
         lr_scheduler = LinearWithRewindsScheduler(
             alpha_f=args.alpha_f,
@@ -541,7 +632,7 @@ def main():
 
     # initialize the wandb logger
     wandb_logger = WandBLogger(
-        project=args.wandb_project,
+        project=args.wandb_project_name,
         name=args.wandb_name,
         init_kwargs = {"config": vars(args)}
     )
@@ -556,8 +647,8 @@ def main():
     else:
         raise ValueError(f"Unsupported time unit: {train_time.unit}")
     
-    if args.pruner == "BReg":
-        pruner_algorithm = BReg.from_args(train_size, max_train_steps, len(train_dataloader), args)
+    if args.pruner == "GBReg":
+        pruner_algorithm = GBReg.from_args(train_size, max_train_steps, len(train_dataloader), args)
     elif args.pruner == "PLATON":
         pruner_algorithm = PLATON.from_args(max_train_steps, len(train_dataloader), args)
     else:
