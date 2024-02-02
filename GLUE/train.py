@@ -439,19 +439,22 @@ def parse_args():
         "--deltaT_final_warmup", 
         type=my_custom_type,  
         default=1,    
-        help="masking horizon for the final warmup stage.")
+        help="masking horizon for the final warmup stage."
+    )
 
     # PLATON
     parser.add_argument(
         "--beta1", 
         type=float, 
         default=0.85, 
-        help="The beta1 of PLATON pruner.")
+        help="The beta1 of PLATON pruner."
+    )
     parser.add_argument(
         "--beta2", 
         type=float, 
         default=0.85, 
-        help="The beta2 of PLATON pruner.")
+        help="The beta2 of PLATON pruner."
+    )
 
     # pruning algorithm selection
     parser.add_argument(
