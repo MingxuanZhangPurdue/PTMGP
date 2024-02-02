@@ -375,7 +375,10 @@ class GBReg(Algorithm):
                 logger.log_metrics({"lambda_mix": float(lambda_mix)})
                 logger.log_metrics({"prior_threshold": float(prior_threshold)})
                 # log the number of parameters in the high penalty region, i.e., the spike region
-                if self.log_spike_region and state.timestamp.batch.value < self.cubic_prune_end and (state.timestamp.batch.value-1) % self.deltaT == 0:
+                if (self.log_spike_region and 
+                    state.timestamp.batch.value > self.cubic_prune_start and
+                    state.timestamp.batch.value < self.cubic_prune_end and
+                    (state.timestamp.batch.value-1) % self.deltaT == 0):
                     n_param_below_prior_threshold = self.calculate_n_param_below_prior_threshold(state.model, prior_threshold)
                     logger.log_metrics({"n_param_below_prior_threshold": int(n_param_below_prior_threshold)})
             # perform gradient clipping during the final warmup stage if no prior regularization is imposed
