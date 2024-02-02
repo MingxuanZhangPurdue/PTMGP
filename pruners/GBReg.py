@@ -80,7 +80,7 @@ class GBReg(Algorithm):
             param_magnitude_stat_log_interval=None,
             # log how mask corresponds to the final ratio changes during the gradual cubic pruning stage
             mask_update_log_interval=None,
-            # log the number of parameters in the high penalty region, i.e., the spike region
+            # whether to log the number of parameters in the high penalty region, i.e., the spike region
             log_spike_region = False,
         ):
 
