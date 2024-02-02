@@ -245,7 +245,7 @@ def parse_args():
     parser.add_argument(
         "--t_warmup", 
         type=str, 
-        default="0.01dur", 
+        default="0.01dur",
         help="Number of steps for the warmup in the linear lr scheduler."
     )
     parser.add_argument(
