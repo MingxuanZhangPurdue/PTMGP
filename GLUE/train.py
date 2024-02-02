@@ -655,7 +655,7 @@ def main():
     # initialize the wandb logger
     wandb_logger = WandBLogger(
         project=args.wandb_project_name,
-        name=args.wandb_name,
+        name=args.wandb_run_name,
         init_kwargs = {"config": vars(args)}
     )
 
