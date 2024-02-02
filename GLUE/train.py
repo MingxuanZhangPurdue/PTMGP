@@ -442,6 +442,25 @@ def parse_args():
         help="masking horizon for the final warmup stage."
     )
 
+    # logging choices for GBReg
+    parser.add_argument(
+        "--param_magnitude_stat_log_interval",
+        type=my_custom_type,
+        default=None,
+        help="Interval to log the parameter magnitude statistics."
+    )
+    parser.add_argument(
+        "--mask_update_log_interval",
+        type=my_custom_type,
+        default=None,
+        help="Interval to log the mask update."
+    )
+    parser.add_argument(
+        "--log_spike_region",
+        action="store_true",
+        help="If passed, will log the spike region."
+    )
+
     # PLATON
     parser.add_argument(
         "--beta1", 

@@ -81,7 +81,7 @@ class GBReg(Algorithm):
             # log how mask corresponds to the final ratio changes during the gradual cubic pruning stage
             mask_update_log_interval=None,
             # log the number of parameters in the high penalty region, i.e., the spike region
-            spike_region_log_interval=None,
+            log_spike_region = False,
         ):
 
         self.final_ratio_mask_after_initial_warmup = None
@@ -92,7 +92,7 @@ class GBReg(Algorithm):
 
         self.param_magnitude_stat_log_interval = param_magnitude_stat_log_interval
         self.mask_update_log_interval = mask_update_log_interval
-        self.spike_region_log_interval = spike_region_log_interval
+        self.log_spike_region = log_spike_region
 
         self.clipping_threshold = clipping_threshold
 
@@ -151,7 +151,6 @@ class GBReg(Algorithm):
         anneal_end_lambda_mix = _convert_timestr_to_int(args.anneal_end_lambda_mix, max_train_steps, train_dataloader_len) if args.anneal_end_lambda_mix is not None else None
         param_magnitude_stat_log_interval = _convert_timestr_to_int(args.param_magnitude_stat_log_interval, max_train_steps, train_dataloader_len) if args.param_magnitude_stat_log_interval is not None else None
         mask_update_log_interval = _convert_timestr_to_int(args.mask_update_log_interval, max_train_steps, train_dataloader_len) if args.mask_update_log_interval is not None else None
-        spike_region_log_interval = _convert_timestr_to_int(args.spike_region_log_interval, max_train_steps, train_dataloader_len) if args.spike_region_log_interval is not None else None
         return self(
             train_size=train_size,
             max_train_steps=max_train_steps,
@@ -183,7 +182,7 @@ class GBReg(Algorithm):
             clipping_threshold=args.clipping_threshold,
             param_magnitude_stat_log_interval=param_magnitude_stat_log_interval,
             mask_update_log_interval=mask_update_log_interval,
-            spike_region_log_interval=spike_region_log_interval,
+            log_spike_region=args.log_spike_region
         )
 
     def whether_mask_para(self, n):
@@ -375,6 +374,10 @@ class GBReg(Algorithm):
                 logger.log_metrics({"sigma1": float(sigma1)})
                 logger.log_metrics({"lambda_mix": float(lambda_mix)})
                 logger.log_metrics({"prior_threshold": float(prior_threshold)})
+                # log the number of parameters in the high penalty region, i.e., the spike region
+                if self.log_spike_region and state.timestamp.batch.value < self.cubic_prune_end and (state.timestamp.batch.value-1) % self.deltaT == 0:
+                    n_param_below_prior_threshold = self.calculate_n_param_below_prior_threshold(state.model, prior_threshold)
+                    logger.log_metrics({"n_param_below_prior_threshold": int(n_param_below_prior_threshold)})
             # perform gradient clipping during the final warmup stage if no prior regularization is imposed
             if state.timestamp.batch.value > self.cubic_prune_end and self.final_warmup_prior_config == "none" and self.clipping_threshold is not None:
                 grad_norm = self.gradient_clipping(state.model)
@@ -407,8 +410,3 @@ class GBReg(Algorithm):
                 else:
                     magnitude_stat = self.magnitude_stat(state.model, self.current_mask)
                 logger.log_metrics(magnitude_stat)
-            # log the number of parameters in the high penalty region, i.e., the spike region
-            if self.spike_region_log_interval is not None and state.timestamp.batch.value % self.spike_region_log_interval == 0 and mask is None:
-                prior_threshold, _, _, _ = self.calculate_prior_grad_components(state.timestamp.batch.value)
-                n_param_below_prior_threshold = self.calculate_n_param_below_prior_threshold(state.model, prior_threshold)
-                logger.log_metrics({"n_param_below_prior_threshold": int(n_param_below_prior_threshold)})
