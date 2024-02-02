@@ -343,14 +343,14 @@ class GBReg(Algorithm):
         return magnitude_stat
     
     def calculate_n_param_below_prior_threshold(self, model, prior_threshold):
-        n = 0
+        n_param = 0
         n_below_prior_threshold = 0
         with torch.no_grad():
             for n, p in model.named_parameters():
                 if self.whether_mask_para(n):
-                    n += p.numel()
+                    n_param += p.numel()
                     n_below_prior_threshold += (p.abs() <= prior_threshold).sum().item()
-        return n_below_prior_threshold, n_below_prior_threshold/n
+        return n_below_prior_threshold, n_below_prior_threshold/n_param
     
     def print_pruning_modules(self, model):
         print ("list of model modules to be pruned:")
