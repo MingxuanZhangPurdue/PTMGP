@@ -35,7 +35,9 @@ class LinearWithRewindsScheduler(ComposerScheduler):
                  rewind_interval: Union[str, Time],
                  num_rewinds: int = 1,
                  alpha_i: float = 1.0,
-                 alpha_f: float = 0.0):
+                 alpha_f: float = 0.0,
+                 alpha_i_rewind: float = 1.0,
+                 alpha_f_rewind: float = 0.0,):
         
         assert num_rewinds >= 1, "num_rewinds must be >= 1"
         rewind_start = Time.from_timestring(rewind_start) if isinstance(rewind_start, str) else rewind_start
@@ -51,8 +53,8 @@ class LinearWithRewindsScheduler(ComposerScheduler):
         for i in range(num_rewinds):
             self.schedulers.append(RelativeLinearScheduler(t_start=rewind_start + i*rewind_interval,
                                                            t_end=rewind_start + (i+1)*rewind_interval, 
-                                                           alpha_i=alpha_i, 
-                                                           alpha_f=alpha_f))
+                                                           alpha_i=alpha_i_rewind, 
+                                                           alpha_f=alpha_f_rewind))
         self.num_rewinds = num_rewinds
         self.rewind_start = rewind_start
         self.rewind_interval = rewind_interval

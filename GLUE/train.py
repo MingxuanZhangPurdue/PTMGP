@@ -245,6 +245,7 @@ def parse_args():
         help="The lr scheduler to use.",
         choices=["linear", "linear_with_rewinds", "constant"],
     )
+    # warmup for linear and constant lr scheduler
     parser.add_argument(
         "--t_warmup", 
         type=str, 
@@ -259,6 +260,19 @@ def parse_args():
     )
     parser.add_argument(
         "--alpha_f",
+        type=float,
+        default=0.1, 
+        help="Final learning rate multiplier for lr scheduler."
+    )
+    # linear with rewiods lr scheduler specificaions
+    parser.add_argument(
+        "--alpha_i_rewind",
+        type=float,
+        default=1.0, 
+        help="Initial learning rate multiplier for lr scheduler."
+    )
+    parser.add_argument(
+        "--alpha_f_rewind",
         type=float,
         default=0.1, 
         help="Final learning rate multiplier for lr scheduler."
@@ -663,7 +677,10 @@ def main():
         )
     elif args.lr_scheduler == "linear_with_rewinds":
         lr_scheduler = LinearWithRewindsScheduler(
+            alpha_i=args.alpha_i,
             alpha_f=args.alpha_f,
+            alpha_i_rewind=args.alpha_i_rewind,
+            alpha_f_rewind=args.alpha_f_rewind,
             rewind_interval=args.rewind_interval,
             rewind_start=args.rewind_start,
             num_rewinds=args.num_rewinds
