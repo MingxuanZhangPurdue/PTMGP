@@ -7,7 +7,7 @@ class RelativeLinearScheduler(ComposerScheduler):
     def __init__(self,
                  t_start: Union[str, Time] = '0dur',
                  t_end: Union[str, Time] = '1dur', 
-                 alpha_i: float = 1.0, 
+                 alpha_i: float = 1.0,
                  alpha_f: float = 0.0, 
                  ):
         self.alpha_i = alpha_i
@@ -20,6 +20,9 @@ class RelativeLinearScheduler(ComposerScheduler):
             f"t_start must be < t_end, but got {t_start.value} and {t_end.value}"
 
     def __call__(self, state: State):
+        if self.alpha_i == self.alpha_f:
+            # alpha_i == alpha_f, implies constant lr scheduler, hence return alpha_i
+            return self.alpha_i
         t_start = _convert_time(self.t_start, state)
         t_end = _convert_time(self.t_end, state)
         current_time = state.timestamp.get(t_start.unit)
@@ -31,48 +34,72 @@ class RelativeLinearScheduler(ComposerScheduler):
 
 class LinearWithRewindsScheduler(ComposerScheduler):
     def __init__(self,
-                 rewind_start: Union[str, Time],
-                 rewind_interval: Union[str, Time],
+                 t_iw: Union[str, Time],
+                 t_rewind: Union[str, Time],
+                 t_fw: Union[str, Time],
                  num_rewinds: int = 1,
-                 alpha_i: float = 1.0,
-                 alpha_f: float = 0.0,
+                 alpha_i_iw: float = 1.0,
+                 alpha_f_iw: float = 0.0,
                  alpha_i_rewind: float = 1.0,
-                 alpha_f_rewind: float = 0.0,):
+                 alpha_f_rewind: float = 0.0,
+                 alpha_i_fw: float = 1.0,
+                 alpha_f_fw: float = 0.0,):
         
         assert num_rewinds >= 1, "num_rewinds must be >= 1"
-        rewind_start = Time.from_timestring(rewind_start) if isinstance(rewind_start, str) else rewind_start
-        rewind_interval = Time.from_timestring(rewind_interval) if isinstance(rewind_interval, str) else rewind_interval
-        assert rewind_start.unit == rewind_interval.unit, \
-            f"rewind_start and rewind_interval must have the same unit, but got {rewind_start.unit} and {rewind_interval.unit}"
-        assert rewind_start.value > 0, \
-            f"rewind_start must be > 0, but got {rewind_start.value}"
-        self.schedulers = [RelativeLinearScheduler(t_start=0*rewind_start,
-                                                   t_end=rewind_start, 
-                                                   alpha_i=alpha_i, 
-                                                   alpha_f=alpha_f)]
+        t_iw = Time.from_timestring(t_iw) if isinstance(t_iw, str) else t_iw
+        t_rewind = Time.from_timestring(t_rewind) if isinstance(t_rewind, str) else t_rewind
+        t_fw = Time.from_timestring(t_fw) if isinstance(t_fw, str) else t_fw
+        assert t_iw.unit == t_rewind.unit == t_fw.unit, \
+            f"t_iw, t_rewind, and t_fw must have the same unit, but got {t_iw.unit}, {t_rewind.unit}, and {t_fw.unit}"
+        assert t_iw.value > 0 and t_rewind.value > 0 and t_fw.value > 0, \
+            f"t_iw.value, t_rewind.value, and t_fw.value must be > 0, but got {t_iw.value}, {t_rewind.value}, and {t_fw.value}"
+        self.schedulers = [RelativeLinearScheduler(
+            t_start=0*t_iw,
+            t_end=t_iw, 
+            alpha_i=alpha_i_iw,
+            alpha_f=alpha_f_iw)
+        ]
+        if alpha_i_rewind== alpha_f_rewind:
+            assert num_rewinds == 1, "alpha_i_rewind and alpha_f_rewind are the same, which implies constant lr scheduler, hence num_rewinds must be 1"
         for i in range(num_rewinds):
-            self.schedulers.append(RelativeLinearScheduler(t_start=rewind_start + i*rewind_interval,
-                                                           t_end=rewind_start + (i+1)*rewind_interval, 
-                                                           alpha_i=alpha_i_rewind, 
-                                                           alpha_f=alpha_f_rewind))
-        self.num_rewinds = num_rewinds
-        self.rewind_start = rewind_start
-        self.rewind_interval = rewind_interval
+            self.schedulers.append(
+                RelativeLinearScheduler(
+                    t_start=t_iw + i*t_rewind,
+                    t_end=t_iw + (i+1)*t_rewind, 
+                    alpha_i=alpha_i_rewind, 
+                    alpha_f=alpha_f_rewind)
+                )
+        self.schedulers.append(
+            RelativeLinearScheduler(
+                t_start=t_iw + num_rewinds*t_rewind,
+                t_end=t_iw + num_rewinds*t_rewind + t_fw,
+                alpha_i=alpha_i_fw,
+                alpha_f=alpha_f_fw)
+            )
 
-        self.current_scheduler_index = 0
-        self.next_rewind_time = self.rewind_start
+        self.num_rewinds = num_rewinds
+        self.t_iw = t_iw
+        self.t_rewind = t_rewind
+        self.t_fw = t_fw
+
+        self.initial_warmup_end = t_iw
+        self.current_scheduler_index = 1
+        self.next_rewind_time = t_iw
+        self.final_warmup_start = t_iw + num_rewinds*t_rewind
 
     def __call__(self, state: State):
-        next_rewind_time = _convert_time(self.next_rewind_time, state)
-        if state.timestamp < next_rewind_time:
-            return self.schedulers[self.current_scheduler_index](state)
+        initial_warmup_end = _convert_time(self.initial_warmup_end, state)
+        final_warmup_start = _convert_time(self.final_warmup_start, state)
+        if state.timestamp < initial_warmup_end:
+            return self.schedulers[0](state)
+        elif state.timestamp >= final_warmup_start:
+            return self.schedulers[-1](state)
         else:
-            if self.current_scheduler_index+1 > self.num_rewinds:
-                return self.schedulers[self.current_scheduler_index](state)
-            else:
+            next_rewind_time = _convert_time(self.next_rewind_time, state)
+            if state.timestamp == next_rewind_time:
                 self.current_scheduler_index += 1
-                self.next_rewind_time += self.rewind_interval
-                return self.schedulers[self.current_scheduler_index](state)
+                self.next_rewind_time += self.t_rewind
+            return self.schedulers[self.current_scheduler_index](state)
 
 def _get_unit_and_value(time):
     time_units = ["ep", "ba", "dur"]
