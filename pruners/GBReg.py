@@ -326,7 +326,15 @@ class GBReg(Algorithm):
             mask_ind = True if train_step_index % deltaT == 0 else False
         return ratio, mask_ind
     
+    def zero_masked_para_grad(self, model):
+        with torch.no_grad():
+            for n, p in model.named_parameters():
+                if self.whether_mask_para(n):
+                    p.grad.masked_fill_(self.final_ratio_mask[n], 0.0)
+    
     def gradient_clipping(self, model):
+        if self.use_fixed_mask_final_warmup:
+            self.zero_masked_para_grad(model)
         grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=self.clipping_threshold).item()
         return grad_norm
 
