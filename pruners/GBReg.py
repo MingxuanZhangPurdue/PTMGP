@@ -319,7 +319,10 @@ class GBReg(Algorithm):
             mask_ind = True
         elif train_step_index > cubic_prune_end:
             ratio = final_ratio
-            mask_ind = True if train_step_index % deltaT_final_warmup == 0 else False
+            if self.use_fixed_mask_final_warmup:
+                mask_ind = True
+            else:
+                mask_ind = True if train_step_index % deltaT_final_warmup == 0 else False
         else:
             mul_coeff = 1 - (train_step_index - cubic_prune_start) / (ratio_scheduler_steps)
             ratio = final_ratio + (initial_ratio - final_ratio) * (mul_coeff ** 3)
