@@ -25,7 +25,7 @@ from composer import Trainer
 from composer.algorithms import GradientClipping
 from composer.callbacks import LRMonitor, RuntimeEstimator
 from composer.loggers import WandBLogger
-from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler, CosineAnnealingWarmRestartsScheduler
+from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler, ConstantWithWarmupScheduler
 
 from pruners.PLATON import PLATON
 from pruners.GBReg import GBReg
@@ -42,6 +42,8 @@ task_to_keys = {
     "stsb": ("sentence1", "sentence2"),
     "wnli": ("sentence1", "sentence2"),
 }
+
+# add whether to use fixed mask during finla warmup
 
 def my_custom_type(value):
     try:
@@ -240,13 +242,19 @@ def parse_args():
         type=str,
         default="linear",
         help="The lr scheduler to use.",
-        choices=["linear", "linear_with_rewinds"],
+        choices=["linear", "linear_with_rewinds", "constant"],
     )
     parser.add_argument(
         "--t_warmup", 
         type=str, 
         default="0.01dur",
         help="Number of steps for the warmup in the linear lr scheduler."
+    )
+    parser.add_argument(
+        "--alpha_i",
+        type=float,
+        default=1.0, 
+        help="Initial learning rate multiplier for lr scheduler."
     )
     parser.add_argument(
         "--alpha_f",
@@ -328,12 +336,6 @@ def parse_args():
     )
 
     # GBReg
-    parser.add_argument(
-        "--train_size_coefficient",
-        type=float,
-        default=1.0,
-        help="The coefficient of the train size."
-    )
     parser.add_argument(
         "--sigma0",             
         type=float,            
@@ -646,7 +648,12 @@ def main():
     if args.lr_scheduler == "linear":
         lr_scheduler = LinearWithWarmupScheduler(
             t_warmup=args.t_warmup,
+            alpha_i=args.alpha_i,
             alpha_f=args.alpha_f
+        )
+    elif args.lr_scheduler == "constant":
+        lr_scheduler = ConstantWithWarmupScheduler(
+            t_warmup=args.t_warmup,
         )
     elif args.lr_scheduler == "linear_with_rewinds":
         lr_scheduler = LinearWithRewindsScheduler(
