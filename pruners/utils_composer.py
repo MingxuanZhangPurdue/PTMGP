@@ -83,7 +83,7 @@ class LinearWithRewindsScheduler(ComposerScheduler):
         self.t_fw = t_fw
 
         self.initial_warmup_end = t_iw
-        self.current_scheduler_index = 1
+        self.current_scheduler_index = 0
         self.next_rewind_time = t_iw
         self.final_warmup_start = t_iw + num_rewinds*t_rewind
 
