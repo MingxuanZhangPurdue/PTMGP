@@ -25,7 +25,7 @@ from composer import Trainer
 from composer.algorithms import GradientClipping
 from composer.callbacks import LRMonitor, RuntimeEstimator
 from composer.loggers import WandBLogger
-from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler, ConstantWithWarmupScheduler
+from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler
 
 from pruners.PLATON import PLATON
 from pruners.GBReg import GBReg
@@ -233,67 +233,97 @@ def parse_args():
     parser.add_argument(
         "--max_duration", 
         type=str,   
-        default="1ep",
+        default="10ep",
         help="Total number of training epochs/batches/steps to perform."
     )
 
-    # lr scheduler
+    # lr scheduler type
     parser.add_argument(
         "--lr_scheduler",
         type=str,
-        default="linear",
+        default="linear_with_warmup",
         help="The lr scheduler to use.",
-        choices=["linear", "linear_with_rewinds", "constant"],
+        choices=["linear_with_warmup", "linear_with_rewinds"],
     )
-    # warmup for linear and constant lr scheduler
+    # linear with warmup lr scheduler specificaions
     parser.add_argument(
         "--t_warmup", 
         type=str, 
         default="0.01dur",
-        help="Number of steps for the warmup in the linear lr scheduler."
+        help="Time for the warmup in the linear with warmup lr scheduler."
     )
     parser.add_argument(
         "--alpha_i",
         type=float,
         default=1.0, 
-        help="Initial learning rate multiplier for lr scheduler."
+        help="Initial learning rate multiplier in the linear with warmup lr scheduler."
     )
     parser.add_argument(
         "--alpha_f",
         type=float,
-        default=0.1, 
-        help="Final learning rate multiplier for lr scheduler."
+        default=0.0, 
+        help="Final learning rate multiplier in the linear with warmup lr scheduler."
     )
-    # linear with rewiods lr scheduler specificaions
+    # linear with rewinds lr scheduler specificaions
+    parser.add_argument(
+        "--t_iw",
+        type=str,
+        default="2ep",
+        help="Time for the initial warmup in the linear with rewinds lr scheduler."
+    )
+    parser.add_argument(
+        "--t_rewind",
+        type=str,
+        default="6ep",
+        help="Time for each rewind in the linear with rewinds lr scheduler."
+    )
+    parser.add_argument(
+        "--t_fw",
+        type=str,
+        default="2ep",
+        help="Time for the final warmup in the linear with rewinds lr scheduler."
+    )
+    parser.add_argument(
+        "--alpha_i_iw",
+        type=float,
+        default=1.0, 
+        help="Initial learning rate multiplier in the linear with rewinds lr scheduler during inital warmup stage."
+    )
+    parser.add_argument(
+        "--alpha_f_iw",
+        type=float,
+        default=0.0, 
+        help="Final learning rate multiplier in the linear with rewinds lr scheduler during inital warmup stage."
+    )
     parser.add_argument(
         "--alpha_i_rewind",
         type=float,
         default=1.0, 
-        help="Initial learning rate multiplier for lr scheduler."
+        help="Initial learning rate multiplier in the linear with rewinds lr scheduler during rewind stage."
     )
     parser.add_argument(
         "--alpha_f_rewind",
         type=float,
-        default=0.1, 
-        help="Final learning rate multiplier for lr scheduler."
+        default=0.0, 
+        help="Final learning rate multiplier in the linear with rewinds lr scheduler during rewind stage."
     )
     parser.add_argument(
-        "--rewind_interval",
-        type=str,
-        default="2ep",
-        help="Interval to rewind the lr scheduler."
+        "--alpha_i_fw",
+        type=float,
+        default=1.0, 
+        help="Initial learning rate multiplier in the linear with rewinds lr scheduler during final warmup stage."
     )
     parser.add_argument(
-        "--rewind_start",
-        type=str,
-        default="6ep",
-        help="Start to rewind the lr scheduler."
+        "--alpha_f_fw",
+        type=float,
+        default=0.0, 
+        help="Final learning rate multiplier in the linear with rewinds lr scheduler during final warmup stage."
     )
     parser.add_argument(
         "--num_rewinds",
         type=int,
         default=1,
-        help="Number of rewinds."
+        help="Number of rewinds in the linear with rewinds lr scheduler."
     )
 
     # wandb logging
@@ -665,24 +695,23 @@ def main():
         eps=1.0e-06, 
         weight_decay=args.weight_decay
     )
-    if args.lr_scheduler == "linear":
+    if args.lr_scheduler == "linear_with_warmup":
         lr_scheduler = LinearWithWarmupScheduler(
             t_warmup=args.t_warmup,
             alpha_i=args.alpha_i,
             alpha_f=args.alpha_f
         )
-    elif args.lr_scheduler == "constant":
-        lr_scheduler = ConstantWithWarmupScheduler(
-            t_warmup=args.t_warmup,
-        )
     elif args.lr_scheduler == "linear_with_rewinds":
         lr_scheduler = LinearWithRewindsScheduler(
-            alpha_i=args.alpha_i,
-            alpha_f=args.alpha_f,
+            t_iw=args.t_iw,
+            t_rewind=args.t_rewind,
+            t_fw=args.t_fw,
+            alpha_i_iw=args.alpha_i_iw,
+            alpha_f_iw=args.alpha_f_iw,
             alpha_i_rewind=args.alpha_i_rewind,
             alpha_f_rewind=args.alpha_f_rewind,
-            rewind_interval=args.rewind_interval,
-            rewind_start=args.rewind_start,
+            alpha_i_fw=args.alpha_i_fw,
+            alpha_f_fw=args.alpha_f_fw,
             num_rewinds=args.num_rewinds
         )
     else:
