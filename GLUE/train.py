@@ -44,6 +44,7 @@ task_to_keys = {
 }
 
 # add whether to use fixed mask during finla warmup
+# combinatio between constant and linear with rewinds lr scheduler.
 
 def my_custom_type(value):
     try:
@@ -435,6 +436,11 @@ def parse_args():
         default=None,
         nargs='+',
         help="The names of the modules that should not be penalized by the prior, if any. We will match the names using regex."
+    )
+    parser.add_argument(
+        "--use_fixed_mask_final_warmup",
+        action="store_true",
+        help="If passed, will use fixed mask during final warmup."
     )
     parser.add_argument(
         "--final_warmup_prior_config",

@@ -68,6 +68,8 @@ class GBReg(Algorithm):
             # initial:  use the initial prior regularization
             # none:     no prior regularization
             final_warmup_prior_config="none",
+            # whether to use fixed mask during the final warmup stage
+            use_fixed_mask_final_warmup=False,
             # masking value for the pruned weights
             masking_value=0.0,
             # parmeter names that should not be masked, matched by regular expression
@@ -87,6 +89,7 @@ class GBReg(Algorithm):
         self.final_ratio_mask_after_initial_warmup = None
         self.current_mask = None
         self.current_ratio = 1.0
+        self.final_ratio_mask = None
 
         self.train_size = train_size
         self.max_train_steps = max_train_steps
@@ -106,6 +109,7 @@ class GBReg(Algorithm):
         self.deltaT = deltaT
         self.deltaT_final_warmup = deltaT_final_warmup
         self.final_warmup_prior_config = final_warmup_prior_config
+        self.use_fixed_mask_final_warmup = use_fixed_mask_final_warmup
 
         cubic_prune_start = initial_warmup_steps
         cubic_prune_end = max_train_steps - final_warmup_steps
@@ -177,6 +181,7 @@ class GBReg(Algorithm):
             deltaT=deltaT,
             deltaT_final_warmup=deltaT_final_warmup,
             final_warmup_prior_config=args.final_warmup_prior_config,
+            use_fixed_mask_final_warmup=args.use_fixed_mask_final_warmup,
             masking_value=args.masking_value,
             non_mask_name=args.non_mask_name,
             non_prior_name=args.non_prior_name,
@@ -279,7 +284,15 @@ class GBReg(Algorithm):
         ratio, mask_ind = self.cubic_remaining_ratio_scheduler(train_step_index)
         if mask_ind and ratio < 1.0:
                 # Mask weights during masking horizon
-                mask_threshold, mask = self.mask_with_threshold(model, ratio)
+                if train_step_index == self.cubic_prune_end and self.use_fixed_mask_final_warmup:
+                    mask_threshold, mask = self.mask_with_threshold(model, ratio)
+                    self.final_ratio_mask = mask
+                elif train_step_index > self.cubic_prune_end and self.use_fixed_mask_final_warmup:
+                    self.prune_with_fixed_mask(model)
+                    mask = self.final_ratio_mask
+                    mask_threshold = 0.0
+                else:
+                    mask_threshold, mask = self.mask_with_threshold(model, ratio)
         else:
             mask_threshold = None
             mask = None
@@ -326,6 +339,14 @@ class GBReg(Algorithm):
                     n_params += p.numel()
                     n_masked_params += p.eq(0.0).sum().item()
         return n_masked_params/n_params
+    
+    def prune_with_fixed_mask(self, model):
+        if self.final_ratio_mask is None:
+            raise ValueError("final_ratio_mask is None")
+        with torch.no_grad():
+            for n, p in model.named_parameters():
+                if self.whether_mask_para(n):
+                    p.data.masked_fill_(self.final_ratio_mask[n], 0.0)
     
     def magnitude_stat(self, model, mask=None):
         magnitude_vector = []
