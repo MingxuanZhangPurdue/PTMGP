@@ -477,7 +477,7 @@ def parse_args():
     parser.add_argument(
         '--non_prior_name',
         type=str,
-        default=None,
+        default=["layernorm", "classifier", "pooler", "embedding", "bias", "prediction"],
         nargs='+',
         help="The names of the modules that should not be penalized by the prior, if any. We will match the names using regex."
     )
