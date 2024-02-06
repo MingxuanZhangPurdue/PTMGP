@@ -71,7 +71,7 @@ class LinearWithRewindsScheduler(ComposerScheduler):
             )
         ]
         if alpha_i_rewind== alpha_f_rewind:
-            assert num_rewinds == 1, "alpha_i_rewind and alpha_f_rewind are the same, which implies constant lr scheduler, hence num_rewinds must be 1"
+            assert num_rewinds == 1, "alpha_i_rewind and alpha_f_rewind are the same, which implies constant lr scheduler during rewind, hence num_rewinds must be 1"
         for i in range(num_rewinds):
             self.schedulers.append(
                 RelativeLinearScheduler(
