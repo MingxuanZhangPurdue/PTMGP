@@ -37,7 +37,7 @@ class LinearWithRewindsScheduler(ComposerScheduler):
                  t_iw: Union[str, Time],
                  t_fw: Union[str, Time] = None,
                  t_rewind: Union[str, Time] = None,
-                 num_rewinds: int = 1,
+                 num_rewinds: int = 0,
                  alpha_i_iw: float = 1.0,
                  alpha_f_iw: float = 0.0,
                  alpha_i_rewind: float = 1.0,
