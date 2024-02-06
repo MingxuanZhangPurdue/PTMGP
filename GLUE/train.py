@@ -348,7 +348,13 @@ def parse_args():
         help="Random seed to use for reproducibility."
     )
 
-    # cubic pruning scheduler
+    # pruning scheduler
+    parser.add_argument(
+        "--sparsity_scheduler_power",
+        type=int,
+        default=3,
+        help="The power of the sparsity scheduler, i.e., if set to 3.0, the sparsity scheduler will be cubic."
+    )
     parser.add_argument(
         "--initial_ratio",      
         type=float,            

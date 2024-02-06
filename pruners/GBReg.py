@@ -62,6 +62,8 @@ class GBReg(Algorithm):
             deltaT=10,
             # masking horizon for the final warmup stage
             deltaT_final_warmup=1,
+            # the power of the sparsity scheduler, i.e., if set to 3.0, the sparsity scheduler will be cubic
+            sparsity_scheduler_power = 3.0,
             # what degree of prior regularization to use during the final warmup stage
             # annealed: use the annealed prior regularization
             # initial:  use the initial prior regularization
@@ -107,6 +109,7 @@ class GBReg(Algorithm):
         self.final_ratio = final_ratio
         self.deltaT = deltaT
         self.deltaT_final_warmup = deltaT_final_warmup
+        self.sparsity_scheduler_power = sparsity_scheduler_power
         self.final_warmup_prior_config = final_warmup_prior_config
         self.use_fixed_mask_final_warmup = use_fixed_mask_final_warmup
 
@@ -179,6 +182,7 @@ class GBReg(Algorithm):
             final_warmup_steps=final_warmup_steps,
             deltaT=deltaT,
             deltaT_final_warmup=deltaT_final_warmup,
+            sparsity_scheduler_power=args.sparsity_scheduler_power,
             final_warmup_prior_config=args.final_warmup_prior_config,
             use_fixed_mask_final_warmup=args.use_fixed_mask_final_warmup,
             masking_value=args.masking_value,
@@ -324,7 +328,7 @@ class GBReg(Algorithm):
                 mask_ind = True if train_step_index % deltaT_final_warmup == 0 else False
         else:
             mul_coeff = 1 - (train_step_index - cubic_prune_start) / (ratio_scheduler_steps)
-            ratio = final_ratio + (initial_ratio - final_ratio) * (mul_coeff ** 3)
+            ratio = final_ratio + (initial_ratio - final_ratio) * (mul_coeff ** self.sparsity_scheduler_power)
             mask_ind = True if train_step_index % deltaT == 0 else False
         return ratio, mask_ind
     
