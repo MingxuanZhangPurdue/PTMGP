@@ -1,6 +1,5 @@
 import torch
 import re
-import wandb
 import numpy as np
 from composer.core import Algorithm, Event
 from pruners.utils_composer import _convert_timestr_to_int
