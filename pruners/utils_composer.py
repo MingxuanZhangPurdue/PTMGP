@@ -35,7 +35,7 @@ class RelativeLinearScheduler(ComposerScheduler):
 class LinearWithRewindsScheduler(ComposerScheduler):
     def __init__(self,
                  t_iw: Union[str, Time],
-                 t_fw: Union[str, Time],
+                 t_fw: Union[str, Time] = None,
                  t_rewind: Union[str, Time] = None,
                  num_rewinds: int = 1,
                  alpha_i_iw: float = 1.0,
@@ -46,14 +46,22 @@ class LinearWithRewindsScheduler(ComposerScheduler):
                  alpha_f_fw: float = 0.0,):
         
         if num_rewinds >= 1 and t_rewind is None:
-            raise ValueError("t_rewind must be provided when num_rewinds is >= 1")
+            raise ValueError("t_rewind must be provided when num_rewinds is >= 1, otherwise set num_rewinds to 0.")
         t_iw = Time.from_timestring(t_iw) if isinstance(t_iw, str) else t_iw
         t_rewind = Time.from_timestring(t_rewind) if isinstance(t_rewind, str) else t_rewind
         t_fw = Time.from_timestring(t_fw) if isinstance(t_fw, str) else t_fw
-        assert t_iw.unit == t_rewind.unit == t_fw.unit, \
-            f"t_iw, t_rewind, and t_fw must have the same unit, but got {t_iw.unit}, {t_rewind.unit}, and {t_fw.unit}"
-        assert t_iw.value > 0 and t_rewind.value > 0 and t_fw.value > 0, \
-            f"t_iw.value, t_rewind.value, and t_fw.value must be > 0, but got {t_iw.value}, {t_rewind.value}, and {t_fw.value}"
+        if t_rewind is not None:
+            assert t_rewind.unit == t_iw.unit, \
+                f"t_rewind and t_iw must have the same unit, but got {t_rewind.unit} and {t_iw.unit}"
+            assert t_rewind.value > 0, \
+                f"t_rewind.value must be > 0, but got {t_rewind.value}."
+        if t_fw is not None:
+            assert t_fw.unit == t_iw.unit, \
+                f"t_fw and t_iw must have the same unit, but got {t_fw.unit} and {t_iw.unit}"
+            assert t_fw.value > 0, \
+                f"t_fw.value must be > 0, but got {t_fw.value}."
+        assert t_iw.value > 0, \
+            f"t_iw.value must be > 0, but got {t_iw.value}."
         self.schedulers = [
             RelativeLinearScheduler(
                 t_start=0*t_iw,
@@ -72,18 +80,20 @@ class LinearWithRewindsScheduler(ComposerScheduler):
                     alpha_i=alpha_i_rewind, 
                     alpha_f=alpha_f_rewind)
                 )
-        self.schedulers.append(
-            RelativeLinearScheduler(
-                t_start=t_iw + num_rewinds*t_rewind,
-                t_end=t_iw + num_rewinds*t_rewind + t_fw,
-                alpha_i=alpha_i_fw,
-                alpha_f=alpha_f_fw)
+        if t_fw is not None:
+            self.schedulers.append(
+                RelativeLinearScheduler(
+                    t_start=t_iw + num_rewinds*t_rewind,
+                    t_end=t_iw + num_rewinds*t_rewind + t_fw,
+                    alpha_i=alpha_i_fw,
+                    alpha_f=alpha_f_fw
+                )
             )
 
         self.num_rewinds = num_rewinds
         self.t_iw = t_iw
-        self.t_rewind = t_rewind
-        self.t_fw = t_fw
+        self.t_rewind = t_rewind if t_rewind is not None else 0*t_iw
+        self.t_fw = t_fw if t_fw is not None else 0*t_iw
 
         self.initial_warmup_end = t_iw
         self.current_scheduler_index = 0
