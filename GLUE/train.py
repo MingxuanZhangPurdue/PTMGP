@@ -29,7 +29,7 @@ from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler
 
 from pruners.PLATON import PLATON
 from pruners.GBReg import GBReg
-from pruners.utils_composer import LinearWithRewindsScheduler
+from pruners.flexible_composer_lr_scheduler import LinearWithRewindsScheduler
 
 task_to_keys = {
     "cola": ("sentence", None),
