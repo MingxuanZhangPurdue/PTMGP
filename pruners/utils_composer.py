@@ -35,8 +35,8 @@ class RelativeLinearScheduler(ComposerScheduler):
 class LinearWithRewindsScheduler(ComposerScheduler):
     def __init__(self,
                  t_iw: Union[str, Time],
-                 t_rewind: Union[str, Time],
                  t_fw: Union[str, Time],
+                 t_rewind: Union[str, Time] = None,
                  num_rewinds: int = 1,
                  alpha_i_iw: float = 1.0,
                  alpha_f_iw: float = 0.0,
@@ -45,7 +45,8 @@ class LinearWithRewindsScheduler(ComposerScheduler):
                  alpha_i_fw: float = 1.0,
                  alpha_f_fw: float = 0.0,):
         
-        assert num_rewinds >= 1, "num_rewinds must be >= 1"
+        if num_rewinds >= 1 and t_rewind is None:
+            raise ValueError("t_rewind must be provided when num_rewinds is >= 1")
         t_iw = Time.from_timestring(t_iw) if isinstance(t_iw, str) else t_iw
         t_rewind = Time.from_timestring(t_rewind) if isinstance(t_rewind, str) else t_rewind
         t_fw = Time.from_timestring(t_fw) if isinstance(t_fw, str) else t_fw
@@ -53,11 +54,13 @@ class LinearWithRewindsScheduler(ComposerScheduler):
             f"t_iw, t_rewind, and t_fw must have the same unit, but got {t_iw.unit}, {t_rewind.unit}, and {t_fw.unit}"
         assert t_iw.value > 0 and t_rewind.value > 0 and t_fw.value > 0, \
             f"t_iw.value, t_rewind.value, and t_fw.value must be > 0, but got {t_iw.value}, {t_rewind.value}, and {t_fw.value}"
-        self.schedulers = [RelativeLinearScheduler(
-            t_start=0*t_iw,
-            t_end=t_iw, 
-            alpha_i=alpha_i_iw,
-            alpha_f=alpha_f_iw)
+        self.schedulers = [
+            RelativeLinearScheduler(
+                t_start=0*t_iw,
+                t_end=t_iw, 
+                alpha_i=alpha_i_iw,
+                alpha_f=alpha_f_iw
+            )
         ]
         if alpha_i_rewind== alpha_f_rewind:
             assert num_rewinds == 1, "alpha_i_rewind and alpha_f_rewind are the same, which implies constant lr scheduler, hence num_rewinds must be 1"
