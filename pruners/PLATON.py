@@ -10,8 +10,8 @@ class PLATON(Algorithm):
                  beta2=0.85,
                  initial_ratio=1.0, 
                  final_ratio=0.1,
-                 initial_warmup=1,
-                 final_warmup=1, 
+                 initial_warmup_steps=1,
+                 final_warmup_steps=1, 
                  deltaT=10,
                  non_mask_name=None):
 
@@ -26,14 +26,14 @@ class PLATON(Algorithm):
 
         self.final_ratio = final_ratio
         self.initial_ratio = initial_ratio
-        self.initial_warmup = initial_warmup
-        self.final_warmup = final_warmup
+        self.initial_warmup_steps = initial_warmup_steps
+        self.final_warmup_steps = final_warmup_steps
         self.deltaT = deltaT
 
         self.non_mask_name_pattern = re.compile("|".join(non_mask_name), re.IGNORECASE) if non_mask_name is not None else None
 
-        cubic_prune_start = initial_warmup
-        cubic_prune_end = max_train_steps - final_warmup
+        cubic_prune_start = initial_warmup_steps
+        cubic_prune_end = max_train_steps - final_warmup_steps
 
         if not (cubic_prune_start < cubic_prune_end <= max_train_steps):
             print ("cubic_prune_start:", cubic_prune_start)
@@ -47,8 +47,8 @@ class PLATON(Algorithm):
         
     @classmethod
     def from_args(self, max_train_steps, train_dataloader_len, args):
-        initial_warmup = _convert_timestr_to_int(args.initial_warmup, max_train_steps, train_dataloader_len)
-        final_warmup = _convert_timestr_to_int(args.final_warmup, max_train_steps, train_dataloader_len)
+        initial_warmup_steps = _convert_timestr_to_int(args.initial_warmup_steps, max_train_steps, train_dataloader_len)
+        final_warmup_steps = _convert_timestr_to_int(args.final_warmup_steps, max_train_steps, train_dataloader_len)
         deltaT = _convert_timestr_to_int(args.deltaT, max_train_steps, train_dataloader_len)
         return self(
             max_train_steps=max_train_steps, 
@@ -56,8 +56,8 @@ class PLATON(Algorithm):
             beta2=args.beta2,
             initial_ratio=args.initial_ratio, 
             final_ratio=args.final_ratio,
-            initial_warmup=initial_warmup, 
-            final_warmup=final_warmup,
+            initial_warmup_steps=initial_warmup_steps, 
+            final_warmup_steps=final_warmup_steps,
             deltaT=deltaT,
             non_mask_name=args.non_mask_name
             )
