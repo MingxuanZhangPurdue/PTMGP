@@ -88,6 +88,7 @@ class GBReg(Algorithm):
         ):
 
         self.final_ratio_mask_after_initial_warmup = None
+        self.last_final_ratio_mask = None
         self.current_mask = None
         self.current_ratio = 1.0
         self.final_ratio_mask = None
@@ -433,8 +434,12 @@ class GBReg(Algorithm):
                 if state.timestamp.batch.value > self.cubic_prune_start and state.timestamp.batch.value % self.mask_update_log_interval == 0:
                     mask_threshold, is_dict = self.calculate_mask_threshold(state.model, self.final_ratio)
                     updated_final_ratio_mask = self.create_mask(state.model, mask_threshold, is_dict)
-                    n_reselection = _calculate_n_reselection(self.final_ratio_mask_after_initial_warmup, updated_final_ratio_mask)
-                    logger.log_metrics({"n_reselection": int(n_reselection)})
+                    n_reselection1 = _calculate_n_reselection(self.final_ratio_mask_after_initial_warmup, updated_final_ratio_mask)
+                    if self.last_final_ratio_mask is not None:
+                        n_reselection2 = _calculate_n_reselection(self.last_final_ratio_mask, updated_final_ratio_mask)
+                        logger.log_metrics({"n_reselection_wrt_last_mask": int(n_reselection2)})
+                    self.last_final_ratio_mask = updated_final_ratio_mask
+                    logger.log_metrics({"n_reselection_wrt_initial_warmup": int(n_reselection1)})
             # perform magnitude pruning
             ratio, mask_threshold, mask = self.magnitude_pruning(state.model, state.timestamp.batch.value)
             # log the current remaining ratio
