@@ -22,9 +22,11 @@ class PLATON(Algorithm):
                  initial_warmup_steps=1,
                  final_warmup_steps=1, 
                  deltaT=10,
-                 non_mask_name=None):
+                 non_mask_name=None,
+                 mask_update_log_interval=None,):
         
         self.final_ratio_mask_after_initial_warmup = None
+        self.mask_update_log_interval = mask_update_log_interval
 
         self.ipt = {}
         self.exp_avg_ipt = {}
@@ -61,6 +63,7 @@ class PLATON(Algorithm):
         initial_warmup_steps = _convert_timestr_to_int(args.initial_warmup_steps, max_train_steps, train_dataloader_len)
         final_warmup_steps = _convert_timestr_to_int(args.final_warmup_steps, max_train_steps, train_dataloader_len)
         deltaT = _convert_timestr_to_int(args.deltaT, max_train_steps, train_dataloader_len)
+        mask_update_log_interval = _convert_timestr_to_int(args.mask_update_log_interval, max_train_steps, train_dataloader_len) if args.mask_update_log_interval is not None else None
         return self(
             max_train_steps=max_train_steps, 
             beta1=args.beta1, 
@@ -70,7 +73,8 @@ class PLATON(Algorithm):
             initial_warmup_steps=initial_warmup_steps, 
             final_warmup_steps=final_warmup_steps,
             deltaT=deltaT,
-            non_mask_name=args.non_mask_name
+            non_mask_name=args.non_mask_name,
+            mask_update_log_interval=mask_update_log_interval,
             )
 
     def whether_mask_para(self, n):
@@ -200,14 +204,15 @@ class PLATON(Algorithm):
         if event == Event.FIT_START:
             self.print_pruning_modules(state.model)
         elif event == Event.BATCH_END:
-            if state.timestamp.batch.value == self.cubic_prune_start:
-                mask_threshold, is_dict = self.calculate_mask_threshold(state.model, self.final_ratio)
-                self.final_ratio_mask_after_initial_warmup = self.create_mask(state.model, mask_threshold, is_dict)
-            if state.timestamp.batch.value > self.cubic_prune_start and state.timestamp.batch.value % self.mask_update_log_interval == 0:
-                mask_threshold, is_dict = self.calculate_mask_threshold(state.model, self.final_ratio)
-                updated_final_ratio_mask = self.create_mask(state.model, mask_threshold, is_dict)
-                n_reselection = _calculate_n_reselection(self.final_ratio_mask_after_initial_warmup, updated_final_ratio_mask)
-                logger.log_metrics({"n_reselection": int(n_reselection)})
+            if self.mask_update_log_interval is not None:
+                if state.timestamp.batch.value == self.cubic_prune_start:
+                    mask_threshold, is_dict = self.calculate_mask_threshold(state.model, self.final_ratio)
+                    self.final_ratio_mask_after_initial_warmup = self.create_mask(state.model, mask_threshold, is_dict)
+                if state.timestamp.batch.value > self.cubic_prune_start and state.timestamp.batch.value % self.mask_update_log_interval == 0:
+                    mask_threshold, is_dict = self.calculate_mask_threshold(state.model, self.final_ratio)
+                    updated_final_ratio_mask = self.create_mask(state.model, mask_threshold, is_dict)
+                    n_reselection = _calculate_n_reselection(self.final_ratio_mask_after_initial_warmup, updated_final_ratio_mask)
+                    logger.log_metrics({"n_reselection": int(n_reselection)})
             ratio, mask_threshold = self.update_and_pruning(state.model, state.timestamp.batch.value)
             logger.log_metrics({"remaining_ratio": float(ratio)})
             if mask_threshold is not None:
