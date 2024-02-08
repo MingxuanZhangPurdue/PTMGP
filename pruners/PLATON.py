@@ -165,7 +165,7 @@ class PLATON(Algorithm):
         with torch.no_grad():
             for n, p in model.named_parameters():
                 if self.whether_mask_para(n):
-                    p.masked_fill_(mask[n], self.masking_value)
+                    p.masked_fill_(mask[n], 0.0)
         return mask_threshold, mask
 
     def update_and_pruning(self, model, train_step_index):
