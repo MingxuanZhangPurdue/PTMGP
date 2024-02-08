@@ -3,6 +3,15 @@ import re
 from composer.core import Algorithm, Event
 from pruners.utils_composer import _convert_timestr_to_int
 
+def _calculate_n_reselection(mask1, mask2):
+    n_same = 0
+    n = 0
+    for key in mask1.keys():
+        n += mask1[key].numel()
+        n_same += torch.eq(mask1[key], mask2[key]).sum().item()
+    n_diff = n - n_same
+    return n_diff
+
 class PLATON(Algorithm):
     def __init__(self, 
                  max_train_steps, 
@@ -14,6 +23,8 @@ class PLATON(Algorithm):
                  final_warmup_steps=1, 
                  deltaT=10,
                  non_mask_name=None):
+        
+        self.final_ratio_mask_after_initial_warmup = None
 
         self.ipt = {}
         self.exp_avg_ipt = {}
@@ -117,8 +128,7 @@ class PLATON(Algorithm):
                 else:
                     self.ipt[n] = (self.ipt[n]*local_step+(p*p.grad).abs().detach())/(local_step+1)
 
-
-    def mask_with_threshold(self, model, ratio):
+    def calculate_mask_threshold(self, model, ratio):
         # Calculate the final importance score
         is_dict = {}
         for n,p in model.named_parameters():
@@ -135,12 +145,24 @@ class PLATON(Algorithm):
         # Calculate the mask threshold 
         all_is = torch.cat([is_dict[n].view(-1) for n in is_dict])
         mask_threshold = torch.kthvalue(all_is, int(all_is.shape[0]*(1 - ratio)))[0].item()
-        # Mask weights whose importance lower than threshold
+        return mask_threshold, is_dict
+
+    def create_mask(self, model, mask_threshold, is_dict):
+        # Create mask
+        current_mask = {}
+        for n, _ in model.named_parameters():
+            if self.whether_mask_para(n):
+                current_mask[n] = (is_dict[n] < mask_threshold)
+        return current_mask
+    
+    def mask_with_threshold(self, model, ratio):
+        mask_threshold, is_dict = self.calculate_mask_threshold(model, ratio)
+        mask = self.create_mask(model, mask_threshold, is_dict)
         with torch.no_grad():
-            for n,p in model.named_parameters():
+            for n, p in model.named_parameters():
                 if self.whether_mask_para(n):
-                    p.masked_fill_(is_dict[n] < mask_threshold, 0.0)
-        return mask_threshold
+                    p.masked_fill_(mask[n], self.masking_value)
+        return mask_threshold, mask
 
     def update_and_pruning(self, model, train_step_index):
         # Update importance score after optimizer stepping
@@ -149,7 +171,7 @@ class PLATON(Algorithm):
         ratio, mask_ind = self.cubic_remaining_ratio_scheduler(train_step_index)
         if mask_ind and ratio < 1.0:
             # Mask weights during masking horizon
-            mask_threshold = self.mask_with_threshold(model, ratio)
+            mask_threshold, _ = self.mask_with_threshold(model, ratio)
         else:
             mask_threshold = None
         
@@ -178,6 +200,14 @@ class PLATON(Algorithm):
         if event == Event.FIT_START:
             self.print_pruning_modules(state.model)
         elif event == Event.BATCH_END:
+            if state.timestamp.batch.value == self.cubic_prune_start:
+                mask_threshold, is_dict = self.calculate_mask_threshold(state.model, self.final_ratio)
+                self.final_ratio_mask_after_initial_warmup = self.create_mask(state.model, mask_threshold, is_dict)
+            if state.timestamp.batch.value > self.cubic_prune_start and state.timestamp.batch.value % self.mask_update_log_interval == 0:
+                mask_threshold, is_dict = self.calculate_mask_threshold(state.model, self.final_ratio)
+                updated_final_ratio_mask = self.create_mask(state.model, mask_threshold, is_dict)
+                n_reselection = _calculate_n_reselection(self.final_ratio_mask_after_initial_warmup, updated_final_ratio_mask)
+                logger.log_metrics({"n_reselection": int(n_reselection)})
             ratio, mask_threshold = self.update_and_pruning(state.model, state.timestamp.batch.value)
             logger.log_metrics({"remaining_ratio": float(ratio)})
             if mask_threshold is not None:
