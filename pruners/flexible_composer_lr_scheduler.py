@@ -49,16 +49,12 @@ class LinearWithRewindsScheduler(ComposerScheduler):
         t_iw = Time.from_timestring(t_iw) if isinstance(t_iw, str) else t_iw
         t_rewind = Time.from_timestring(t_rewind) if isinstance(t_rewind, str) else t_rewind
         t_fw = Time.from_timestring(t_fw) if isinstance(t_fw, str) else t_fw
-        if t_rewind is not None:
+        if t_rewind is not None and t_rewind.value > 0:
             assert t_rewind.unit == t_iw.unit, \
                 f"t_rewind and t_iw must have the same unit, but got {t_rewind.unit} and {t_iw.unit}"
-            assert t_rewind.value > 0, \
-                f"t_rewind.value must be > 0, but got {t_rewind.value}."
-        if t_fw is not None:
+        if t_fw is not None and t_fw.value > 0:
             assert t_fw.unit == t_iw.unit, \
                 f"t_fw and t_iw must have the same unit, but got {t_fw.unit} and {t_iw.unit}"
-            assert t_fw.value > 0, \
-                f"t_fw.value must be > 0, but got {t_fw.value}."
         assert t_iw.value > 0, \
             f"t_iw.value must be > 0, but got {t_iw.value}."
         self.schedulers = [
@@ -69,8 +65,10 @@ class LinearWithRewindsScheduler(ComposerScheduler):
                 alpha_f=alpha_f_iw
             )
         ]
-        if alpha_i_rewind== alpha_f_rewind:
+        if alpha_i_rewind == alpha_f_rewind:
             assert num_rewinds == 1, "alpha_i_rewind and alpha_f_rewind are the same, which implies constant lr scheduler during rewind, hence num_rewinds must be 1"
+        if t_rewind.value == 0 and num_rewinds > 0:
+            raise ValueError("t_rewind must be > 0 if num_rewinds > 0")
         for i in range(num_rewinds):
             self.schedulers.append(
                 RelativeLinearScheduler(
@@ -79,7 +77,7 @@ class LinearWithRewindsScheduler(ComposerScheduler):
                     alpha_i=alpha_i_rewind, 
                     alpha_f=alpha_f_rewind)
                 )
-        if t_fw is not None:
+        if t_fw is not None and t_fw.value > 0:
             self.schedulers.append(
                 RelativeLinearScheduler(
                     t_start=t_iw + num_rewinds*t_rewind,
