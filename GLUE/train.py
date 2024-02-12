@@ -703,7 +703,7 @@ def main():
     elif args.pruner == "PLATON":
         pruner_algorithm = PLATON.from_args(max_train_steps, len(train_dataloader), args)
     elif args.pruner == "testpruner":
-        pruner_algorithm = testpruner.from_args(max_train_steps, len(train_dataloader), args)
+        pruner_algorithm = testpruner.from_args(train_size, max_train_steps, len(train_dataloader), args)
     else:
         raise ValueError(f"Unsupported pruner: {args.pruner}")
         
