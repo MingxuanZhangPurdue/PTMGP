@@ -23,7 +23,7 @@ def _count_differences_between_masks(mask1, mask2):
     n_diff = n - n_same
     return n_diff
 
-class GBR(Algorithm):
+class testpruner(Algorithm):
     def __init__(
             self,
             # total number of training samples
@@ -229,7 +229,7 @@ class GBR(Algorithm):
         with torch.no_grad():
             for n, p in model.named_parameters():
                 if self.whether_mask_param(n):
-                    is_dict[n] = p.abs().detach()
+                    is_dict[n] = (p * p.grad).abs().detach()
         all_is = torch.cat([is_dict[n].view(-1) for n in is_dict])
         mask_threshold = torch.kthvalue(all_is, int(all_is.shape[0] * (1 - ratio)))[0].item()
         return mask_threshold, is_dict

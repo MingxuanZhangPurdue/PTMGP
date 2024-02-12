@@ -28,7 +28,8 @@ from composer.loggers import WandBLogger
 from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler
 
 from pruners.PLATON import PLATON
-from pruners.GBReg import GBReg
+from pruners.GBR import GBR
+from pruners.testpruner import testpruner
 from pruners.flexible_composer_lr_scheduler import LinearWithRewindsScheduler
 
 task_to_keys = {
@@ -350,12 +351,6 @@ def parse_args():
 
     # pruning scheduler
     parser.add_argument(
-        "--sparsity_scheduler_power",
-        type=int,
-        default=3,
-        help="The power of the sparsity scheduler, i.e., if set to 3.0, the sparsity scheduler will be cubic."
-    )
-    parser.add_argument(
         "--initial_ratio",      
         type=float,            
         default=1.0,     
@@ -380,10 +375,10 @@ def parse_args():
         help="The number of training batches/steps for final warmup."
     )
     parser.add_argument(
-        "--deltaT",             
+        "--pruning_interval",             
         type=my_custom_type,   
         default=10,    
-        help="The masking horizon for the cubic pruning scheduler."
+        help="The number of training steps between two pruning operations."
     )
 
     # GBReg
@@ -480,49 +475,18 @@ def parse_args():
         help="The number of traing batches/steps for lambda_mix annealing to end."
     )
 
-    parser.add_argument(
-        '--non_prior_name',
-        type=str,
-        default=["layernorm", "classifier", "pooler", "embedding", "bias", "prediction"],
-        nargs='+',
-        help="The names of the modules that should not be penalized by the prior, if any. We will match the names using regex."
-    )
-    parser.add_argument(
-        "--use_fixed_mask_final_warmup",
-        action="store_true",
-        help="If passed, will use fixed mask during final warmup."
-    )
-    parser.add_argument(
-        "--final_warmup_prior_config",
-        type=str,
-        default="none",
-        choices=["none", "annealed", "initial"],
-        help="The final warmup prior configuration.",
-    )
-    parser.add_argument(
-        "--deltaT_final_warmup", 
-        type=my_custom_type,  
-        default=1,    
-        help="masking horizon for the final warmup stage."
-    )
-
     # logging choices for GBReg
     parser.add_argument(
-        "--param_magnitude_stat_log_interval",
+        "--magnitude_stat_log_interval",
         type=my_custom_type,
         default=None,
         help="Interval to log the parameter magnitude statistics."
     )
     parser.add_argument(
-        "--mask_update_log_interval",
+        "--mask_change_log_interval",
         type=my_custom_type,
         default=None,
         help="Interval to log the mask update."
-    )
-    parser.add_argument(
-        "--log_spike_region",
-        action="store_true",
-        help="If passed, will log the spike region."
     )
 
     # PLATON
@@ -550,15 +514,9 @@ def parse_args():
     parser.add_argument(
         "--pruner", 
         type=str, 
-        default="GBReg", 
+        default="GBR", 
         help="The pruner to use.", 
-        choices=["PLATON", "GBReg"]
-    )
-    parser.add_argument(
-        "--masking_value",      
-        type=float,            
-        default=0.0,   
-        help="The filling value of the masked weights."
+        choices=["PLATON", "GBR", "testpruner"]
     )
 
     args = parser.parse_args()
@@ -740,10 +698,12 @@ def main():
     else:
         raise ValueError(f"Unsupported time unit: {train_time.unit}")
     
-    if args.pruner == "GBReg":
-        pruner_algorithm = GBReg.from_args(train_size, max_train_steps, len(train_dataloader), args)
+    if args.pruner == "GBR":
+        pruner_algorithm = GBR.from_args(train_size, max_train_steps, len(train_dataloader), args)
     elif args.pruner == "PLATON":
         pruner_algorithm = PLATON.from_args(max_train_steps, len(train_dataloader), args)
+    elif args.pruner == "testpruner":
+        pruner_algorithm = testpruner.from_args(max_train_steps, len(train_dataloader), args)
     else:
         raise ValueError(f"Unsupported pruner: {args.pruner}")
         
