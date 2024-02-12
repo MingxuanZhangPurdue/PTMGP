@@ -285,7 +285,7 @@ class GBR(Algorithm):
             mask_ind = True
         else:
             mul_coeff = 1 - (train_step_index - self.pruning_start) / (self.pruning_steps)
-            ratio = self.final_ratio + (self.nitial_ratio - self.final_ratio) * (mul_coeff ** 3)
+            ratio = self.final_ratio + (self.initial_ratio - self.final_ratio) * (mul_coeff ** 3)
             mask_ind = True if train_step_index % self.pruning_interval == 0 else False
         return ratio, mask_ind
     
