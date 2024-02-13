@@ -32,17 +32,9 @@ class GBReg(Algorithm):
             train_size,
             # total number of training steps
             max_train_steps,
-            # initial value of sigma0
+            # value of sigma0
             sigma0=1e-15,
-            # initial factor value for sigma0
-            alpha_i_sigma0=1.0,
-            # final factor value for sigma0
-            alpha_f_sigma0=1.0,
-            # start step of annealing for sigma0
-            anneal_start_sigma0=None,
-             # end step of annealing for sigma0
-            anneal_end_sigma0=None,
-            # initial value of sigma1
+            # value of sigma1
             sigma1=0.05,
             # initial value of lambda_mix
             lambda_mix=1e-4,
@@ -106,12 +98,6 @@ class GBReg(Algorithm):
         )
 
         self.sigma0 = sigma0
-        self.alpha_i_sigma0 = alpha_i_sigma0
-        self.alpha_f_sigma0 = alpha_f_sigma0
-        self.anneal_start_sigma0 = anneal_start_sigma0 if anneal_start_sigma0 is not None else pruning_start
-        self.anneal_end_sigma0 = anneal_end_sigma0 if anneal_end_sigma0 is not None else pruning_end
-
-        # we do not anneal sigma1
         self.sigma1 = sigma1
 
         self.lambda_mix = lambda_mix
@@ -131,8 +117,6 @@ class GBReg(Algorithm):
         initial_warmup_steps = _convert_timestr_to_int(args.initial_warmup_steps, max_train_steps, train_dataloader_len)
         final_warmup_steps = _convert_timestr_to_int(args.final_warmup_steps, max_train_steps, train_dataloader_len)
         pruning_interval = _convert_timestr_to_int(args.pruning_interval, max_train_steps, train_dataloader_len)
-        anneal_start_sigma0 = _convert_timestr_to_int(args.anneal_start_sigma0, max_train_steps, train_dataloader_len) if args.anneal_start_sigma0 is not None else None
-        anneal_end_sigma0 = _convert_timestr_to_int(args.anneal_end_sigma0, max_train_steps, train_dataloader_len) if args.anneal_end_sigma0 is not None else None
         anneal_start_lambda_mix = _convert_timestr_to_int(args.anneal_start_lambda_mix, max_train_steps, train_dataloader_len) if args.anneal_start_lambda_mix is not None else None
         anneal_end_lambda_mix = _convert_timestr_to_int(args.anneal_end_lambda_mix, max_train_steps, train_dataloader_len) if args.anneal_end_lambda_mix is not None else None
         magnitude_stat_log_interval = _convert_timestr_to_int(args.magnitude_stat_log_interval, max_train_steps, train_dataloader_len) if args.magnitude_stat_log_interval is not None else None
@@ -141,10 +125,6 @@ class GBReg(Algorithm):
             train_size=train_size,
             max_train_steps=max_train_steps,
             sigma0=args.sigma0,
-            alpha_i_sigma0=args.alpha_i_sigma0,
-            alpha_f_sigma0=args.alpha_f_sigma0,
-            anneal_start_sigma0=anneal_start_sigma0,
-            anneal_end_sigma0=anneal_end_sigma0,
             sigma1=args.sigma1,
             lambda_mix=args.lambda_mix,
             alpha_i_lambda_mix=args.alpha_i_lambda_mix,
@@ -169,7 +149,7 @@ class GBReg(Algorithm):
         else:
             return not bool(re.search(self.non_mask_name_pattern, n))
         
-    def linear_prior_scheduler(self, train_step_index):
+    def lambda_mix_annealing_scheduler(self, train_step_index):
         lambda_mix_factor = _linear_scheduler(
             train_step_index, 
             self.anneal_start_lambda_mix, 
@@ -177,17 +157,12 @@ class GBReg(Algorithm):
             self.alpha_i_lambda_mix, 
             self.alpha_f_lambda_mix
         )
-        sigma0_factor = _linear_scheduler(
-            train_step_index, 
-            self.anneal_start_sigma0, 
-            self.anneal_end_sigma0,
-            self.alpha_i_sigma0, 
-            self.alpha_f_sigma0
-        )
-        return sigma0_factor*self.sigma0, self.sigma1, lambda_mix_factor*self.lambda_mix
+        return lambda_mix_factor*self.lambda_mix
 
     def calculate_prior_grad_components(self, train_step_index):
-        sigma0, sigma1, lambda_mix = self.linear_prior_scheduler(train_step_index)
+        sigma0 = self.sigma0
+        sigma1 = self.sigma1
+        lambda_mix = self.lambda_mix_annealing_scheduler(train_step_index)
         c1 = np.log(lambda_mix) - np.log(1 - lambda_mix) + 0.5 * np.log(sigma0) - 0.5 * np.log(sigma1)
         c2 = 0.5 / sigma0 - 0.5 / sigma1
         prior_threshold = np.sqrt(np.log((1 - lambda_mix) / lambda_mix * np.sqrt(sigma1 / sigma0)) / (

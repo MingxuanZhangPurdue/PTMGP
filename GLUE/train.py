@@ -45,23 +45,24 @@ task_to_keys = {
 # add whether to use fixed mask during finla warmup
 # combinatio between constant and linear with rewinds lr scheduler.
 
-def my_custom_type(value):
+def str_int_and_none(value):
     try:
         # Try to convert the value to an integer
         return int(value)
     except ValueError:
         # If conversion to int fails, return the value as a string
-        if value == "None":
+        if value == "none".casefold():
             return None
-        return value
+        else:
+            return value
     
-def my_custom_type2(value):
+def float_and_none(value):
     try:
         # Try to convert the value to an integer
         return float(value)
     except ValueError:
         # If conversion to int fails, return the value as a string
-        if value == "None":
+        if value == "none".casefold():
             return None
         else:
             raise ValueError(f"Unsupported value type {value}")
@@ -138,7 +139,7 @@ def parse_args():
 
     # checkpointing
     parser.add_argument(
-        "--run_name", 
+        "--run_name",
         type=str, 
         default=None, 
         help="Name of the run."
@@ -150,14 +151,14 @@ def parse_args():
         help="Folder to save the checkpoints."
     )
     parser.add_argument(
-        "--save_interval",     
+        "--save_interval",  
         type=str, 
         default="1ep", 
         help="Interval to save the checkpoints."
     )
     parser.add_argument(
-        "--autoresume", 
-        action="store_true", 
+        "--autoresume",
+        action="store_true",
         help="If passed, will resume the latest checkpoint if any."
     )
     parser.add_argument(
@@ -186,7 +187,7 @@ def parse_args():
     # evaluation
     parser.add_argument(
         "--eval_interval", 
-        type=my_custom_type, 
+        type=str_int_and_none, 
         default="1ep",
         help="Interval to evaluate the model."
     )
@@ -200,7 +201,7 @@ def parse_args():
     # training setups
     parser.add_argument(
         "--clipping_threshold",
-        type=my_custom_type2,
+        type=float_and_none,
         default=1.0,
         help="Gradient clipping threshold."
     )
@@ -362,19 +363,19 @@ def parse_args():
     )
     parser.add_argument(
         "--initial_warmup_steps",    
-          type=my_custom_type,   
+          type=str_int_and_none,   
           default=0, 
           help="The number of training batches/steps for initial warmup."
     )
     parser.add_argument(
         "--final_warmup_steps",       
-        type=my_custom_type,   
+        type=str_int_and_none,   
         default=0,     
         help="The number of training batches/steps for final warmup."
     )
     parser.add_argument(
         "--pruning_interval",             
-        type=my_custom_type,   
+        type=str_int_and_none,   
         default=10,    
         help="The number of training steps between two pruning operations."
     )
@@ -387,31 +388,6 @@ def parse_args():
         help="The smaller variance of the Mixture Gaussian prior."
     )
     parser.add_argument(
-        "--alpha_i_sigma0",     
-        type=float,            
-        default=1.0,   
-        help="The initial factor value of the sigma0."
-    )
-    parser.add_argument(
-        "--alpha_f_sigma0",     
-        type=float,            
-        default=1.0,   
-        help="The final factor value of the sigma0."
-    )
-    parser.add_argument(
-        "--anneal_start_sigma0",
-        type=my_custom_type,
-        default=None,
-        help="The number of traing batches/steps for sigma0 annealing to start."
-    )
-    parser.add_argument(
-        "--anneal_end_sigma0",
-        type=my_custom_type,
-        default=None,
-        help="The number of traing batches/steps for sigma0 annealing to end."
-    )
-
-    parser.add_argument(
         "--sigma1",             
         type=float,            
         default=0.1,   
@@ -422,7 +398,7 @@ def parse_args():
         "--lambda_mix",         
         type=float,            
         default=1e-4,  
-        help="The mixing coefficient of the Mixture Gaussian prior."
+        help="The initial value of the mixing coefficient of the Mixture Gaussian prior."
     )
     parser.add_argument(
         "--alpha_i_lambda_mix",    
@@ -438,13 +414,13 @@ def parse_args():
     )
     parser.add_argument(
         "--anneal_start_lambda_mix",       
-        type=my_custom_type,   
+        type=str_int_and_none,
         default=None,  
         help="The number of traing batches/steps for lambda_mix annealing to start."
     )
     parser.add_argument(
         "--anneal_end_lambda_mix",         
-        type=my_custom_type,  
+        type=str_int_and_none,  
         default=None,  
         help="The number of traing batches/steps for lambda_mix annealing to end."
     )
@@ -452,13 +428,13 @@ def parse_args():
     # logging choices for GBReg
     parser.add_argument(
         "--magnitude_stat_log_interval",
-        type=my_custom_type,
+        type=str_int_and_none,
         default=None,
         help="Interval to log the parameter magnitude statistics."
     )
     parser.add_argument(
         "--mask_change_log_interval",
-        type=my_custom_type,
+        type=str_int_and_none,
         default=None,
         help="Interval to log the mask update."
     )
