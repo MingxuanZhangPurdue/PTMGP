@@ -214,9 +214,13 @@ class GBReg(Algorithm):
                 mask_threshold, mask = self.mask_with_threshold(model, ratio)
                 self.final_fixed_mask = mask
             elif train_step_index > self.pruning_end:
-                self.prune_with_fixed_mask(model, self.final_fixed_mask)
-                mask = self.final_fixed_mask
-                mask_threshold = 0.0
+                if self.final_fixed_mask is not None:
+                    self.prune_with_fixed_mask(model, self.final_fixed_mask)
+                    mask = self.final_fixed_mask
+                    mask_threshold = 0.0
+                else:
+                    mask_threshold, mask = self.mask_with_threshold(model, self.final_ratio)
+                    self.final_fixed_mask = mask
             else:
                 mask_threshold, mask = self.mask_with_threshold(model, ratio)
         else:
