@@ -679,7 +679,7 @@ def main():
         callbacks=[LRMonitor(), RuntimeEstimator()],
 
         # algorithms
-        algorithms=[pruner_algorithm] if args.pruner == "GBReg" else [gc, pruner_algorithm],
+        algorithms=[pruner_algorithm],
 
         # checkpointing
         run_name=args.run_name,
