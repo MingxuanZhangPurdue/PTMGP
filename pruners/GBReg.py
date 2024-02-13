@@ -125,8 +125,6 @@ class GBReg(Algorithm):
             anneal_start_sigma0=anneal_start_sigma0,
             anneal_end_sigma0=anneal_end_sigma0,
             sigma1=args.sigma1,
-            alpha_i_sigma1=args.alpha_i_sigma1,
-            alpha_f_sigma1=args.alpha_f_sigma1,
             lambda_mix=args.lambda_mix,
             alpha_i_lambda_mix=args.alpha_i_lambda_mix,
             alpha_f_lambda_mix=args.alpha_f_lambda_mix,
