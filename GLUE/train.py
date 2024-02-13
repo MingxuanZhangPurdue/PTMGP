@@ -27,9 +27,7 @@ from composer.callbacks import LRMonitor, RuntimeEstimator
 from composer.loggers import WandBLogger
 from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler
 
-from pruners.PLATON import PLATON
 from pruners.GBReg import GBReg
-from pruners.testpruner import testpruner
 from pruners.flexible_composer_lr_scheduler import LinearWithRewindsScheduler
 
 task_to_keys = {
@@ -465,34 +463,13 @@ def parse_args():
         help="Interval to log the mask update."
     )
 
-    # PLATON
-    parser.add_argument(
-        "--beta1", 
-        type=float, 
-        default=0.85, 
-        help="The beta1 of PLATON pruner."
-    )
-    parser.add_argument(
-        "--beta2", 
-        type=float, 
-        default=0.85, 
-        help="The beta2 of PLATON pruner."
-    )
-
-    # pruning algorithm selection
+    # what to prune
     parser.add_argument(
         '--non_mask_name', 
         nargs='+', 
         type=str, 
         default=["layernorm", "classifier", "pooler", "embedding", "bias", "prediction"],
         help="The names of the modules that should not be pruned. We will match the names using regex."
-    )
-    parser.add_argument(
-        "--pruner", 
-        type=str, 
-        default="GBReg", 
-        help="The pruner to use.", 
-        choices=["PLATON", "GBReg", "testpruner"]
     )
 
     args = parser.parse_args()
@@ -674,16 +651,8 @@ def main():
     else:
         raise ValueError(f"Unsupported time unit: {train_time.unit}")
     
-    if args.pruner == "GBReg":
-        pruner_algorithm = GBReg.from_args(train_size, max_train_steps, len(train_dataloader), args)
-    elif args.pruner == "PLATON":
-        pruner_algorithm = PLATON.from_args(max_train_steps, len(train_dataloader), args)
-    elif args.pruner == "testpruner":
-        pruner_algorithm = testpruner.from_args(train_size, max_train_steps, len(train_dataloader), args)
-    else:
-        raise ValueError(f"Unsupported pruner: {args.pruner}")
+    pruner_algorithm = GBReg.from_args(train_size, max_train_steps, len(train_dataloader), args)
         
-
     # gradient clipping following oBERT and PLATON
     gc = GradientClipping(clipping_type='norm', clipping_threshold=args.clipping_threshold)
 
