@@ -72,7 +72,7 @@ class GBReg(Algorithm):
             magnitude_stat_log_interval=None,
             # interval for logging the mask change during the gradual pruning stage
             mask_change_log_interval=None,
-            # flag to log the count and percentage of parameters remaining in the high-penalty region (spike) after one optimization step post-pruning.
+            # flag to log the count of parameters remaining in the high-penalty region (spike) after one optimization step post-pruning.
             log_spike_remainings=False
         ):
 
@@ -377,7 +377,7 @@ class GBReg(Algorithm):
                         n_diff = _count_mask_differences(self.after_initial_warmup_mask, updated_mask)
                         logger.log_metrics({"n_mask_diff_wrt_initial_warmup": int(n_diff)})
                     self.current_mask = updated_mask
-            # log the count and percentage of parameters remaining in the high-penalty region (spike) after one optimization step post-pruning
+            # log the count of parameters remaining in the high-penalty region (spike) after one optimization step post-pruning
             if (self.log_spike_remainings and 
                 state.timestamp.batch.value > self.pruning_start and
                 state.timestamp.batch.value < self.pruning_end and

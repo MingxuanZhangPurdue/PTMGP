@@ -465,7 +465,7 @@ def parse_args():
     parser.add_argument(
         "--log_spike_remainings",
         action="store_true",
-        help="If passed, will log the count and percentage of parameters remaining in the high-penalty (spike) region after one optimization step post-pruning."
+        help="If passed, will log the count of parameters remaining in the high-penalty (spike) region after one optimization step post-pruning."
     )
 
     # what to prune
