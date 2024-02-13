@@ -179,7 +179,7 @@ class testpruner(Algorithm):
         with torch.no_grad():
             for n, p in model.named_parameters():
                 if self.whether_mask_param(n):
-                    self.ipt[n] = p.grad
+                    self.ipt[n] = p.grad.detach().clone()
                     temp = p.pow(2).mul(c2).add(c1).exp().add(1).pow(-1)
                     temp = temp.mul((sigma0-sigma1)/(self.train_size*sigma0*sigma1)).add((-1)/(self.train_size*sigma1))
                     p.grad -= p.mul(temp)
