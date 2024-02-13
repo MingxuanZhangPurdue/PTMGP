@@ -15,6 +15,15 @@ def _linear_scheduler(step, start, end, start_value, end_value):
         frac_of_total = min(1.0, (step - start) / (end - start))
         current_factor = start_value + frac_of_total * (end_value - start_value)
         return current_factor
+    
+def _count_mask_differences(mask1, mask2):
+    n_same = 0
+    n_total = 0
+    for key in mask1.keys():
+        n_total += mask1[key].numel()
+        n_same += torch.eq(mask1[key], mask2[key]).sum().item()
+    n_diff = n_total - n_same
+    return n_diff
 
 class GBReg(Algorithm):
     def __init__(
@@ -61,10 +70,13 @@ class GBReg(Algorithm):
             clipping_threshold=1.0,
             # interval for logging the parameter's magnitude statistics during the initial warmup stage
             magnitude_stat_log_interval=None,
+            # interval for logging the mask change during the gradual pruning stage
+            mask_change_log_interval=None
         ):
         self.final_fixed_mask = None
 
         self.magnitude_stat_log_interval = magnitude_stat_log_interval
+        self.mask_change_log_interval = mask_change_log_interval
 
         self.train_size = train_size
         self.max_train_steps = max_train_steps
@@ -92,6 +104,7 @@ class GBReg(Algorithm):
         self.anneal_start_sigma0 = anneal_start_sigma0 if anneal_start_sigma0 is not None else pruning_start
         self.anneal_end_sigma0 = anneal_end_sigma0 if anneal_end_sigma0 is not None else pruning_end
 
+        # we do not anneal sigma1
         self.sigma1 = sigma1
 
         self.lambda_mix = lambda_mix
@@ -116,6 +129,7 @@ class GBReg(Algorithm):
         anneal_start_lambda_mix = _convert_timestr_to_int(args.anneal_start_lambda_mix, max_train_steps, train_dataloader_len) if args.anneal_start_lambda_mix is not None else None
         anneal_end_lambda_mix = _convert_timestr_to_int(args.anneal_end_lambda_mix, max_train_steps, train_dataloader_len) if args.anneal_end_lambda_mix is not None else None
         magnitude_stat_log_interval = _convert_timestr_to_int(args.magnitude_stat_log_interval, max_train_steps, train_dataloader_len) if args.magnitude_stat_log_interval is not None else None
+        mask_change_log_interval = _convert_timestr_to_int(args.mask_change_log_interval, max_train_steps, train_dataloader_len) if args.mask_change_log_interval is not None else None
         return self(
             train_size=train_size,
             max_train_steps=max_train_steps,
@@ -138,6 +152,7 @@ class GBReg(Algorithm):
             non_mask_name=args.non_mask_name,
             clipping_threshold=args.clipping_threshold,
             magnitude_stat_log_interval=magnitude_stat_log_interval,
+            mask_change_log_interval=mask_change_log_interval,
         )
 
     def whether_mask_param(self, n):
@@ -214,13 +229,9 @@ class GBReg(Algorithm):
                 mask_threshold, mask = self.mask_with_threshold(model, ratio)
                 self.final_fixed_mask = mask
             elif train_step_index > self.pruning_end:
-                if self.final_fixed_mask is not None:
-                    self.prune_with_fixed_mask(model, self.final_fixed_mask)
-                    mask = self.final_fixed_mask
-                    mask_threshold = 0.0
-                else:
-                    mask_threshold, mask = self.mask_with_threshold(model, self.final_ratio)
-                    self.final_fixed_mask = mask
+                self.prune_with_fixed_mask(model, self.final_fixed_mask)
+                mask = self.final_fixed_mask
+                mask_threshold = 0.0
             else:
                 mask_threshold, mask = self.mask_with_threshold(model, ratio)
         else:
@@ -301,7 +312,16 @@ class GBReg(Algorithm):
             if self.magnitude_stat_log_interval is not None:
                 magnitude_stat = self.magnitude_stat(state.model)
                 logger.log_metrics(magnitude_stat)
+            # in case we resume training from a checkpoint after the gradual pruning stage, we need to generate the final fixed mask first
+            if state.timestamp.batch.value > self.pruning_end and self.final_fixed_mask is None:
+                print ("generate the final fixed mask first...")
+                mask_threshold, is_dict = self.calculate_mask_threshold(state.model, self.final_ratio)
+                self.final_fixed_mask = self.create_mask(state.model, mask_threshold, is_dict)
         elif event == Event.AFTER_TRAIN_BATCH:
+            # in case we resume training from a checkpoint after the gradual pruning stage, we need to generate the final fixed mask first
+            if state.timestamp.batch.value > self.pruning_end and self.final_fixed_mask is None:
+                mask_threshold, is_dict = self.calculate_mask_threshold(state.model, self.final_ratio)
+                self.final_fixed_mask = self.create_mask(state.model, mask_threshold, is_dict)
             # add prior gradients to the model during the gradual cubic pruning stage
             if state.timestamp.batch.value <= self.pruning_end:
                 prior_threshold, sigma0, sigma1, lambda_mix = self.add_prior_grad(state.model, state.timestamp.batch.value)
