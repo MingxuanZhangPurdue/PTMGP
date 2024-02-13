@@ -28,8 +28,7 @@ from composer.loggers import WandBLogger
 from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler
 
 from pruners.PLATON import PLATON
-from pruners.GBR import GBR
-from pruners.testpruner import testpruner
+from pruners.GBReg import GBReg
 from pruners.flexible_composer_lr_scheduler import LinearWithRewindsScheduler
 
 task_to_keys = {
@@ -514,9 +513,9 @@ def parse_args():
     parser.add_argument(
         "--pruner", 
         type=str, 
-        default="GBR", 
+        default="GBReg", 
         help="The pruner to use.", 
-        choices=["PLATON", "GBR", "testpruner"]
+        choices=["PLATON", "GBReg"]
     )
 
     args = parser.parse_args()
