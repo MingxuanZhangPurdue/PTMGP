@@ -697,12 +697,10 @@ def main():
     else:
         raise ValueError(f"Unsupported time unit: {train_time.unit}")
     
-    if args.pruner == "GBR":
-        pruner_algorithm = GBR.from_args(train_size, max_train_steps, len(train_dataloader), args)
+    if args.pruner == "GBReg":
+        pruner_algorithm = GBReg.from_args(train_size, max_train_steps, len(train_dataloader), args)
     elif args.pruner == "PLATON":
         pruner_algorithm = PLATON.from_args(max_train_steps, len(train_dataloader), args)
-    elif args.pruner == "testpruner":
-        pruner_algorithm = testpruner.from_args(train_size, max_train_steps, len(train_dataloader), args)
     else:
         raise ValueError(f"Unsupported pruner: {args.pruner}")
         
