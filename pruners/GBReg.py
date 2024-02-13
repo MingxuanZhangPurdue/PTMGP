@@ -318,10 +318,6 @@ class GBReg(Algorithm):
                 mask_threshold, is_dict = self.calculate_mask_threshold(state.model, self.final_ratio)
                 self.final_fixed_mask = self.create_mask(state.model, mask_threshold, is_dict)
         elif event == Event.AFTER_TRAIN_BATCH:
-            # in case we resume training from a checkpoint after the gradual pruning stage, we need to generate the final fixed mask first
-            if state.timestamp.batch.value > self.pruning_end and self.final_fixed_mask is None:
-                mask_threshold, is_dict = self.calculate_mask_threshold(state.model, self.final_ratio)
-                self.final_fixed_mask = self.create_mask(state.model, mask_threshold, is_dict)
             # add prior gradients to the model during the gradual cubic pruning stage
             if state.timestamp.batch.value <= self.pruning_end:
                 prior_threshold, sigma0, sigma1, lambda_mix = self.add_prior_grad(state.model, state.timestamp.batch.value)
