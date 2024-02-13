@@ -58,10 +58,10 @@ def str_int_and_none(value):
     
 def float_and_none(value):
     try:
-        # Try to convert the value to an integer
+        # Try to convert the value to a float
         return float(value)
     except ValueError:
-        # If conversion to int fails, return the value as a string
+        # If conversion to float fails, return the value as a string
         if value == "none".casefold():
             return None
         else:
@@ -199,6 +199,11 @@ def parse_args():
     )
 
     # training setups
+    parser.add_argument(
+        "--use_gradient_clipping_for_all_steps",
+        action="store_true",
+        help="If passed, will use gradient clipping for all training steps."
+    )
     parser.add_argument(
         "--clipping_threshold",
         type=float_and_none,
@@ -660,7 +665,7 @@ def main():
         callbacks=[LRMonitor(), RuntimeEstimator()],
 
         # algorithms
-        algorithms=[pruner_algorithm],
+        algorithms=[gc, pruner_algorithm] if args.use_gradient_clipping_for_all_steps else [pruner_algorithm],
 
         # checkpointing
         run_name=args.run_name,
