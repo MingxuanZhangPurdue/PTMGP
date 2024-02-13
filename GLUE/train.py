@@ -29,6 +29,7 @@ from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler
 
 from pruners.PLATON import PLATON
 from pruners.GBReg import GBReg
+from pruners.testpruner import testpruner
 from pruners.flexible_composer_lr_scheduler import LinearWithRewindsScheduler
 
 task_to_keys = {
@@ -491,7 +492,7 @@ def parse_args():
         type=str, 
         default="GBReg", 
         help="The pruner to use.", 
-        choices=["PLATON", "GBReg"]
+        choices=["PLATON", "GBReg", "testpruner"]
     )
 
     args = parser.parse_args()
@@ -677,6 +678,8 @@ def main():
         pruner_algorithm = GBReg.from_args(train_size, max_train_steps, len(train_dataloader), args)
     elif args.pruner == "PLATON":
         pruner_algorithm = PLATON.from_args(max_train_steps, len(train_dataloader), args)
+    elif args.pruner == "testpruner":
+        pruner_algorithm = testpruner.from_args(train_size, max_train_steps, len(train_dataloader), args)
     else:
         raise ValueError(f"Unsupported pruner: {args.pruner}")
         
