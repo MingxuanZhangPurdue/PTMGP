@@ -71,12 +71,19 @@ class GBReg(Algorithm):
             # interval for logging the parameter's magnitude statistics during the initial warmup stage
             magnitude_stat_log_interval=None,
             # interval for logging the mask change during the gradual pruning stage
-            mask_change_log_interval=None
+            mask_change_log_interval=None,
+            # flag to log the count and percentage of parameters remaining in the high-penalty region (spike) after one optimization step post-pruning.
+            log_spike_remainings=False
         ):
+
+        self.after_initial_warmup_mask = None
+        self.current_mask = None
         self.final_fixed_mask = None
+        self.current_prior_threshold = None
 
         self.magnitude_stat_log_interval = magnitude_stat_log_interval
         self.mask_change_log_interval = mask_change_log_interval
+        self.log_spike_remainings = log_spike_remainings
 
         self.train_size = train_size
         self.max_train_steps = max_train_steps
@@ -153,6 +160,7 @@ class GBReg(Algorithm):
             clipping_threshold=args.clipping_threshold,
             magnitude_stat_log_interval=magnitude_stat_log_interval,
             mask_change_log_interval=mask_change_log_interval,
+            log_spike_remainings=args.log_spike_remainings
         )
 
     def whether_mask_param(self, n):
@@ -295,6 +303,14 @@ class GBReg(Algorithm):
         magnitude_stat["std"] = float(magnitude_vector.std())
         return magnitude_stat
     
+    def count_params_below_prior_threshold(self, model, prior_threshold):
+        n_param_below_prior_threshold = 0
+        with torch.no_grad():
+            for n, p in model.named_parameters():
+                if self.whether_mask_param(n):
+                    n_param_below_prior_threshold += (p.abs() < prior_threshold).sum().item()
+        return n_param_below_prior_threshold
+    
     def print_pruning_modules(self, model):
         print ("list of model modules to be pruned:")
         for n, _ in model.named_parameters():
@@ -318,14 +334,15 @@ class GBReg(Algorithm):
                 mask_threshold, is_dict = self.calculate_mask_threshold(state.model, self.final_ratio)
                 self.final_fixed_mask = self.create_mask(state.model, mask_threshold, is_dict)
         elif event == Event.AFTER_TRAIN_BATCH:
-            # add prior gradients to the model during the gradual cubic pruning stage
+            # add prior gradients to the model during the gradual pruning stage
             if state.timestamp.batch.value <= self.pruning_end:
                 prior_threshold, sigma0, sigma1, lambda_mix = self.add_prior_grad(state.model, state.timestamp.batch.value)
                 logger.log_metrics({"sigma0": float(sigma0)})
                 logger.log_metrics({"sigma1": float(sigma1)})
                 logger.log_metrics({"lambda_mix": float(lambda_mix)})
                 logger.log_metrics({"prior_threshold": float(prior_threshold)})
-            # perform gradient clipping during the final warmup stage if no prior regularization is imposed
+                self.current_prior_threshold = prior_threshold
+            # perform gradient clipping during the final warmup stage
             if state.timestamp.batch.value > self.pruning_end and self.clipping_threshold is not None:
                 grad_norm = self.gradient_clipping(state.model, self.final_fixed_mask)
                 logger.log_metrics({"grad_norm": float(grad_norm)})
@@ -343,3 +360,27 @@ class GBReg(Algorithm):
                 state.timestamp.batch.value % self.magnitude_stat_log_interval == 0):
                 magnitude_stat = self.magnitude_stat(state.model)
                 logger.log_metrics(magnitude_stat)
+            # log how mask corresponds to the final ratio changes during the gradual pruning stage
+            if (self.mask_change_log_interval is not None and 
+                state.timestamp.batch.value >= self.pruning_start and
+                state.timestamp.batch.value <= self.pruning_end):
+                if state.timestamp.batch.value == self.pruning_start:
+                    mask_threshold, is_dict = self.calculate_mask_threshold(state.model, self.final_ratio)
+                    self.after_initial_warmup_mask = self.create_mask(state.model, mask_threshold, is_dict)
+                if state.timestamp.batch.value > self.pruning_start and state.timestamp.batch.value % self.mask_change_log_interval == 0:
+                    mask_threshold, is_dict = self.calculate_mask_threshold(state.model, self.final_ratio)
+                    updated_mask = self.create_mask(state.model, mask_threshold, is_dict)
+                    if self.current_mask is not None:
+                        n_diff = _count_mask_differences(self.current_mask, updated_mask)
+                        logger.log_metrics({"n_mask_diff_wrt_current_mask": int(n_diff)})
+                    if self.after_initial_warmup_mask is not None:
+                        n_diff = _count_mask_differences(self.after_initial_warmup_mask, updated_mask)
+                        logger.log_metrics({"n_mask_diff_wrt_initial_warmup": int(n_diff)})
+                    self.current_mask = updated_mask
+            # log the count and percentage of parameters remaining in the high-penalty region (spike) after one optimization step post-pruning
+            if (self.log_spike_remainings and 
+                state.timestamp.batch.value > self.pruning_start and
+                state.timestamp.batch.value < self.pruning_end and
+                state.timestamp.batch.value-1 % self.pruning_interval == 0):
+                n_param_below_prior_threshold = self.count_params_below_prior_threshold(state.model, self.current_prior_threshold)
+                logger.log_metrics({"n_param_below_prior_threshold": int(n_param_below_prior_threshold)})
