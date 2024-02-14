@@ -323,6 +323,13 @@ class GBReg(Algorithm):
                 grad_norm = self.gradient_clipping(state.model, self.final_fixed_mask)
                 logger.log_metrics({"grad_norm": float(grad_norm)})
         elif event == Event.BATCH_END:
+            # log the count of parameters remaining in the high-penalty region (spike) from the last pruning step right before the next pruning step
+            if (self.log_spike_remainings and
+                state.timestamp.batch.value > self.pruning_start and
+                state.timestamp.batch.value <= self.pruning_end and
+                state.timestamp.batch.value % self.pruning_interval == 0):
+                n_param_below_prior_threshold = self.count_params_below_prior_threshold(state.model, self.current_prior_threshold)
+                logger.log_metrics({"n_param_below_prior_threshold": int(n_param_below_prior_threshold)})
             # perform magnitude pruning
             ratio, mask_threshold, mask = self.magnitude_pruning(state.model, state.timestamp.batch.value)
             # log the current remaining ratio
@@ -353,10 +360,3 @@ class GBReg(Algorithm):
                         n_diff = _count_mask_differences(self.after_initial_warmup_mask, updated_mask)
                         logger.log_metrics({"n_mask_diff_wrt_initial_warmup": int(n_diff)})
                     self.current_mask = updated_mask
-            # log the count of parameters remaining in the high-penalty region (spike) after one optimization step post-pruning
-            if (self.log_spike_remainings and
-                state.timestamp.batch.value > self.pruning_start and
-                state.timestamp.batch.value < self.pruning_end and
-                (state.timestamp.batch.value-1) % self.pruning_interval == 0):
-                n_param_below_prior_threshold = self.count_params_below_prior_threshold(state.model, self.current_prior_threshold)
-                logger.log_metrics({"n_param_below_prior_threshold": int(n_param_below_prior_threshold)})
