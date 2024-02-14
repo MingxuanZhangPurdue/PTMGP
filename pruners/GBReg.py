@@ -90,6 +90,12 @@ class GBReg(Algorithm):
         pruning_start = initial_warmup_steps
         pruning_end = max_train_steps - final_warmup_steps
 
+        assert magnitude_stat_log_interval is None or magnitude_stat_log_interval % pruning_interval == 0, (
+            f"magnitude_stat_log_interval: {magnitude_stat_log_interval}, "
+            f"pruning_interval: {pruning_interval}. "
+            "If log the parameter's magnitude statistics, the condition magnitude_stat_log_interval % pruning_interval == 0 must be satisfied, but got False"
+        )
+
         assert pruning_start < pruning_end <= max_train_steps, (
             f"pruning_start: {pruning_start}, "
             f"pruning_end: {pruning_end}, "
@@ -266,12 +272,15 @@ class GBReg(Algorithm):
                 if self.whether_mask_param(n):
                     p.data.masked_fill_(mask[n], 0.0)
     
-    def magnitude_stat(self, model):
+    def magnitude_stat(self, model, mask=None):
         magnitude_vector = []
         with torch.no_grad():
             for n, p in model.named_parameters():
                 if self.whether_mask_param(n):
-                    magnitude_vector.append(p.abs().detach().view(-1))
+                    if mask is None:
+                        magnitude_vector.append(p.abs().detach().view(-1))
+                    else:
+                        magnitude_vector.append(p.abs().detach()[~mask[n]].view(-1))
         magnitude_vector = torch.cat(magnitude_vector)
         magnitude_stat = {}
         magnitude_stat["avg"] = float(magnitude_vector.mean())
@@ -329,7 +338,7 @@ class GBReg(Algorithm):
                 state.timestamp.batch.value <= self.pruning_end and
                 state.timestamp.batch.value % self.pruning_interval == 0):
                 n_param_below_prior_threshold = self.count_params_below_prior_threshold(state.model, self.current_prior_threshold)
-                logger.log_metrics({"n_param_below_prior_threshold": int(n_param_below_prior_threshold)})
+                logger.log_metrics({"n_param_remained": int(n_param_below_prior_threshold)})
             # perform magnitude pruning
             ratio, mask_threshold, mask = self.magnitude_pruning(state.model, state.timestamp.batch.value)
             # log the current remaining ratio
@@ -339,9 +348,11 @@ class GBReg(Algorithm):
                 logger.log_metrics({"mask_threshold": float(mask_threshold)})
             # log the parameter's magnitude statistics
             if (self.magnitude_stat_log_interval is not None and
-                state.timestamp.batch.value < self.pruning_start and
                 state.timestamp.batch.value % self.magnitude_stat_log_interval == 0):
-                magnitude_stat = self.magnitude_stat(state.model)
+                if state.timestamp.batch.value < self.pruning_start:
+                    magnitude_stat = self.magnitude_stat(state.model)
+                elif self.pruning_start <= state.timestamp.batch.value <= self.pruning_end and mask is not None:
+                    magnitude_stat = self.magnitude_stat(state.model, mask)
                 logger.log_metrics(magnitude_stat)
             # log how mask corresponds to the final ratio changes during the gradual pruning stage
             if (self.mask_change_log_interval is not None and 
