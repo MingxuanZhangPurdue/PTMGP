@@ -346,17 +346,6 @@ class GBReg(Algorithm):
             # if the current mask threshold is not None, log the current mask threshold
             if mask_threshold is not None:
                 logger.log_metrics({"mask_threshold": float(mask_threshold)})
-            # log the parameter's magnitude statistics
-            if (self.magnitude_stat_log_interval is not None and
-                state.timestamp.batch.value % self.magnitude_stat_log_interval == 0):
-                if state.timestamp.batch.value < self.pruning_start:
-                    magnitude_stat = self.magnitude_stat(state.model)
-                    logger.log_metrics({"avg_during_initial_warmup": magnitude_stat["avg"],
-                                        "std_during_initial_warmup": magnitude_stat["std"]})
-                elif self.pruning_start <= state.timestamp.batch.value <= self.pruning_end and mask is not None:
-                    magnitude_stat = self.magnitude_stat(state.model, mask)
-                    logger.log_metrics({"avg_during_gradual_pruning": magnitude_stat["avg"],
-                                        "std_during_gradual_pruning": magnitude_stat["std"]})
             # log how mask corresponds to the final ratio changes during the gradual pruning stage
             if (self.mask_change_log_interval is not None and 
                 state.timestamp.batch.value >= self.pruning_start and
@@ -374,3 +363,18 @@ class GBReg(Algorithm):
                         n_diff = _count_mask_differences(self.after_initial_warmup_mask, updated_mask)
                         logger.log_metrics({"n_mask_diff_wrt_initial_warmup": int(n_diff)})
                     self.current_mask = updated_mask
+            # log the parameter's magnitude statistics
+            if (self.magnitude_stat_log_interval is not None and
+                state.timestamp.batch.value % self.magnitude_stat_log_interval == 0):
+                if state.timestamp.batch.value < self.pruning_start:
+                    magnitude_stat = self.magnitude_stat(state.model)
+                    logger.log_metrics({"avg_during_initial_warmup": magnitude_stat["avg"],
+                                        "std_during_initial_warmup": magnitude_stat["std"]})
+                elif self.pruning_start <= state.timestamp.batch.value <= self.pruning_end and mask is not None:
+                    magnitude_stat = self.magnitude_stat(state.model, mask)
+                    logger.log_metrics({"avg_during_gradual_pruning": magnitude_stat["avg"],
+                                        "std_during_gradual_pruning": magnitude_stat["std"]})
+                elif self.pruning_start <= state.timestamp.batch.value <= self.pruning_end and self.current_mask is not None:
+                    magnitude_stat = self.magnitude_stat(state.model, self.current_mask)
+                    logger.log_metrics({"avg_during_gradual_pruning_current_mask": magnitude_stat["avg"],
+                                        "std_during_gradual_pruning_current_mask": magnitude_stat["std"]})
