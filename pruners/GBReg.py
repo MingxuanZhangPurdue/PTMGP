@@ -351,9 +351,12 @@ class GBReg(Algorithm):
                 state.timestamp.batch.value % self.magnitude_stat_log_interval == 0):
                 if state.timestamp.batch.value < self.pruning_start:
                     magnitude_stat = self.magnitude_stat(state.model)
+                    logger.log_metrics({"avg_during_initial_warmup": magnitude_stat["avg"],
+                                        "std_during_initial_warmup": magnitude_stat["std"]})
                 elif self.pruning_start <= state.timestamp.batch.value <= self.pruning_end and mask is not None:
                     magnitude_stat = self.magnitude_stat(state.model, mask)
-                logger.log_metrics(magnitude_stat)
+                    logger.log_metrics({"avg_during_gradual_pruning": magnitude_stat["avg"],
+                                        "std_during_gradual_pruning": magnitude_stat["std"]})
             # log how mask corresponds to the final ratio changes during the gradual pruning stage
             if (self.mask_change_log_interval is not None and 
                 state.timestamp.batch.value >= self.pruning_start and
