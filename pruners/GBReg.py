@@ -311,7 +311,8 @@ class GBReg(Algorithm):
             # log the parameter's magnitude statistics of the pre-trained model
             if self.magnitude_stat_log_interval is not None:
                 magnitude_stat = self.magnitude_stat(state.model)
-                logger.log_metrics(magnitude_stat)
+                logger.log_metrics({"avg_during_initial_warmup": magnitude_stat["avg"],
+                                    "std_during_initial_warmup": magnitude_stat["std"]})
             # in case we resume training from a checkpoint after the gradual pruning stage, we need to generate the final fixed mask first
             if state.timestamp.batch.value > self.pruning_end and self.final_fixed_mask is None:
                 print ("generate the final fixed mask first...")
