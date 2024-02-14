@@ -318,7 +318,8 @@ class GBReg(Algorithm):
                 logger.log_metrics({"prior_threshold": float(prior_threshold)})
                 self.current_prior_threshold = prior_threshold
             # perform gradient clipping during the final warmup stage
-            if state.timestamp.batch.value > self.pruning_end and self.clipping_threshold is not None:
+            if (state.timestamp.batch.value > self.pruning_end and 
+                self.clipping_threshold is not None):
                 grad_norm = self.gradient_clipping(state.model, self.final_fixed_mask)
                 logger.log_metrics({"grad_norm": float(grad_norm)})
         elif event == Event.BATCH_END:

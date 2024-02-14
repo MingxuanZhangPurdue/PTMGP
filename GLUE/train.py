@@ -22,7 +22,6 @@ from composer.core import Evaluator
 from composer import Time, TimeUnit
 from composer.models.huggingface import HuggingFaceModel
 from composer import Trainer
-from composer.algorithms import GradientClipping
 from composer.callbacks import LRMonitor, RuntimeEstimator
 from composer.loggers import WandBLogger
 from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler
@@ -199,11 +198,6 @@ def parse_args():
     )
 
     # training setups
-    parser.add_argument(
-        "--use_gradient_clipping_for_all_steps",
-        action="store_true",
-        help="If passed, will use gradient clipping for all training steps."
-    )
     parser.add_argument(
         "--clipping_threshold",
         type=float_and_none,
@@ -638,9 +632,6 @@ def main():
         raise ValueError(f"Unsupported time unit: {train_time.unit}")
     
     pruner_algorithm = GBReg.from_args(train_size, max_train_steps, len(train_dataloader), args)
-        
-    # gradient clipping following oBERT and PLATON
-    gc = GradientClipping(clipping_type='norm', clipping_threshold=args.clipping_threshold)
 
     # initialize the trainer
     trainer = Trainer(
@@ -665,7 +656,7 @@ def main():
         callbacks=[LRMonitor(), RuntimeEstimator()],
 
         # algorithms
-        algorithms=[gc, pruner_algorithm] if args.use_gradient_clipping_for_all_steps else [pruner_algorithm],
+        algorithms=[pruner_algorithm],
 
         # checkpointing
         run_name=args.run_name,
