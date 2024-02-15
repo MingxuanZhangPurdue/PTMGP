@@ -381,6 +381,13 @@ def parse_args():
 
     # GBReg
     parser.add_argument(
+        "--sigma1",             
+        type=float,            
+        default=0.1,   
+        help="The larger variance of the Mixture Gaussian prior."
+    )
+
+    parser.add_argument(
         "--sigma0",             
         type=float,            
         default=1e-15, 
@@ -409,15 +416,6 @@ def parse_args():
         type=str_int_and_none,  
         default=None,  
         help="The number of traing batches/steps for sigam0 annealing to end."
-    )
-
-
-
-    parser.add_argument(
-        "--sigma1",             
-        type=float,            
-        default=0.1,   
-        help="The larger variance of the Mixture Gaussian prior."
     )
     
     parser.add_argument(
