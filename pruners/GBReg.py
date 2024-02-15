@@ -90,12 +90,6 @@ class GBReg(Algorithm):
         pruning_start = initial_warmup_steps
         pruning_end = max_train_steps - final_warmup_steps
 
-        assert magnitude_stat_log_interval is None or magnitude_stat_log_interval % pruning_interval == 0, (
-            f"magnitude_stat_log_interval: {magnitude_stat_log_interval}, "
-            f"pruning_interval: {pruning_interval}. "
-            "If log the parameter's magnitude statistics, the condition magnitude_stat_log_interval % pruning_interval == 0 must be satisfied, but got False"
-        )
-
         assert pruning_start < pruning_end <= max_train_steps, (
             f"pruning_start: {pruning_start}, "
             f"pruning_end: {pruning_end}, "
