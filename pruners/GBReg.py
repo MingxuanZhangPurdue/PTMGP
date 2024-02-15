@@ -47,7 +47,7 @@ class GBReg(Algorithm):
             anneal_start_sigma0=None,
             # end step of annealing for sigma0
             anneal_end_sigma0=None,
-            # initial value of lambda_mix
+            # initial value for lambda_mix
             lambda_mix=1e-3,
             # initial factor value for lambda_mix
             alpha_i_lambda_mix=1.0,
@@ -57,7 +57,7 @@ class GBReg(Algorithm):
             anneal_start_lambda_mix=None,
             # end step of annealing for lambda_mix
             anneal_end_lambda_mix=None,
-            # initial sparsity ratio, if set to less than 1.0, will prune the model to this ratio at the beginning of the graudal pruning stage
+            # initial remaining ratio, if set to less than 1.0, will prune the model to this ratio at the beginning of the graudal pruning stage
             initial_ratio=0.7,
             # target remaining ratio, i.e., final_ratio = 1 - the target sparsity
             final_ratio=0.1,
@@ -309,12 +309,14 @@ class GBReg(Algorithm):
             # print the list of model modules to be pruned
             self.print_pruning_modules(state.model)
             # log the parameter's magnitude statistics of the pre-trained model
-            if self.log_interval is not None:
+            if (self.log_interval is not None and 
+                logger is not None):
                 magnitude_stat = self.magnitude_stat(state.model)
-                logger.log_metrics({"initial_warmup_magnitude_mean": magnitude_stat["avg"],
-                                    "initial_warmup_magnitude_std":  magnitude_stat["std"]})
+                logger.log_metrics({"magnitude_mean": magnitude_stat["avg"],
+                                    "magnitude_std":  magnitude_stat["std"]})
             # in case we resume training from a checkpoint after the gradual pruning stage, we need to generate the final fixed mask first
-            if state.timestamp.batch.value > self.pruning_end and self.final_fixed_mask is None:
+            if (state.timestamp.batch.value > self.pruning_end and 
+                self.final_fixed_mask is None):
                 print ("generate the final fixed mask first...")
                 mask_threshold, is_dict = self.calculate_mask_threshold(state.model, self.final_ratio)
                 self.final_fixed_mask = self.create_mask(state.model, mask_threshold, is_dict)
@@ -322,19 +324,22 @@ class GBReg(Algorithm):
             # add prior gradients to the model during the gradual pruning stage
             if state.timestamp.batch.value <= self.pruning_end:
                 prior_threshold, sigma0, sigma1, lambda_mix = self.add_prior_grad(state.model, state.timestamp.batch.value)
-                logger.log_metrics({"sigma0": float(sigma0)})
-                logger.log_metrics({"sigma1": float(sigma1)})
-                logger.log_metrics({"lambda_mix": float(lambda_mix)})
-                logger.log_metrics({"prior_threshold": float(prior_threshold)})
+                if logger is not None:
+                    logger.log_metrics({"sigma0": float(sigma0)})
+                    logger.log_metrics({"sigma1": float(sigma1)})
+                    logger.log_metrics({"lambda_mix": float(lambda_mix)})
+                    logger.log_metrics({"prior_threshold": float(prior_threshold)})
                 self.current_prior_threshold = prior_threshold
             # perform gradient clipping during the final warmup stage
             if (state.timestamp.batch.value > self.pruning_end and 
                 self.clipping_threshold is not None):
                 grad_norm = self.gradient_clipping(state.model, self.final_fixed_mask)
-                logger.log_metrics({"grad_norm": float(grad_norm)})
+                if logger is not None:
+                    logger.log_metrics({"grad_norm": float(grad_norm)})
         elif event == Event.BATCH_END:
             # log the count of parameters remaining in the high-penalty region (spike) from the last pruning step right before the next pruning step
             if (self.log_interval is not None and
+                logger is not None and
                 state.timestamp.batch.value > self.pruning_start and
                 state.timestamp.batch.value <= self.pruning_end and
                 state.timestamp.batch.value % self.pruning_interval == 0):
@@ -343,12 +348,14 @@ class GBReg(Algorithm):
             # perform magnitude pruning
             ratio, mask_threshold, mask = self.magnitude_pruning(state.model, state.timestamp.batch.value)
             # log the current remaining ratio
-            logger.log_metrics({"remaining_ratio": float(ratio)})
-            # if the current mask threshold is not None, log the current mask threshold
-            if mask_threshold is not None:
-                logger.log_metrics({"mask_threshold": float(mask_threshold)})
+            if logger is not None:
+                logger.log_metrics({"remaining_ratio": float(ratio)})
+                # if the current mask threshold is not None, log the current mask threshold
+                if mask_threshold is not None:
+                    logger.log_metrics({"mask_threshold": float(mask_threshold)})
             # log how mask corresponds to the final ratio changes during the gradual pruning stage
-            if (self.log_interval is not None and 
+            if (self.log_interval is not None and
+                logger is not None and
                 state.timestamp.batch.value >= self.pruning_start and
                 state.timestamp.batch.value <= self.pruning_end):
                 if state.timestamp.batch.value == self.pruning_start:
@@ -366,9 +373,10 @@ class GBReg(Algorithm):
                     self.current_mask = updated_mask
             # log the parameter's magnitude statistics
             if (self.log_interval is not None and
+                logger is not None and
                 state.timestamp.batch.value < self.pruning_start and
                 state.timestamp.batch.value % self.log_interval == 0
                 ):
                 magnitude_stat = self.magnitude_stat(state.model)
-                logger.log_metrics({"initial_warmup_magnitude_mean": magnitude_stat["avg"],
-                                    "initial_warmup_magnitude_std":  magnitude_stat["std"]})
+                logger.log_metrics({"magnitude_mean": magnitude_stat["avg"],
+                                    "magnitude_std":  magnitude_stat["std"]})
