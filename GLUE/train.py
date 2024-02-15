@@ -387,6 +387,33 @@ def parse_args():
         help="The smaller variance of the Mixture Gaussian prior."
     )
     parser.add_argument(
+        "--alpha_i_sigam0",    
+        type=float,            
+        default=1.0,   
+        help="The initial factor value of the sigam0."
+    )
+    parser.add_argument(
+        "--alpha_f_sigam0",     
+        type=float,            
+        default=1.0,   
+        help="The final factor value of the sigam0."
+    )
+    parser.add_argument(
+        "--anneal_start_sigam0",       
+        type=str_int_and_none,
+        default=None,  
+        help="The number of traing batches/steps for sigam0 annealing to start."
+    )
+    parser.add_argument(
+        "--anneal_end_sigam0",         
+        type=str_int_and_none,  
+        default=None,  
+        help="The number of traing batches/steps for sigam0 annealing to end."
+    )
+
+
+
+    parser.add_argument(
         "--sigma1",             
         type=float,            
         default=0.1,   
