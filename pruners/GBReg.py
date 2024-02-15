@@ -102,7 +102,6 @@ class GBReg(Algorithm):
             "Condition pruning_start < pruning_end <= max_train_steps must be satisfied, but got False"
         )
 
-        
         self.sigma1 = sigma1
 
         self.sigma0 = sigma0
@@ -371,7 +370,7 @@ class GBReg(Algorithm):
                         n_diff = _count_mask_differences(self.after_initial_warmup_mask, updated_mask)
                         logger.log_metrics({"n_mask_diff_wrt_initial_warmup_mask": int(n_diff)})
                     self.current_mask = updated_mask
-            # log the parameter's magnitude statistics
+            # log the parameter's magnitude statistics during the initial warmup stage
             if (self.log_interval is not None and
                 logger is not None and
                 state.timestamp.batch.value < self.pruning_start and

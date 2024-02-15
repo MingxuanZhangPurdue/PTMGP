@@ -454,7 +454,7 @@ def parse_args():
         "--log_interval",
         type=str_int_and_none,
         default=None,
-        help="Interval to log the research-related information."
+        help="Interval to log all research-related information."
     )
 
     # pruning configurations
