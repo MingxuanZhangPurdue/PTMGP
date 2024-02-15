@@ -424,32 +424,28 @@ def parse_args():
         help="The number of traing batches/steps for lambda_mix annealing to end."
     )
 
-    # logging choices for GBReg
+    # logging interval for GBReg
     parser.add_argument(
-        "--magnitude_stat_log_interval",
+        "--log_interval",
         type=str_int_and_none,
         default=None,
-        help="Interval to log the parameter magnitude statistics."
-    )
-    parser.add_argument(
-        "--mask_change_log_interval",
-        type=str_int_and_none,
-        default=None,
-        help="Interval to log the mask update."
-    )
-    parser.add_argument(
-        "--log_spike_remainings",
-        action="store_true",
-        help="If passed, will log the count of parameters remaining in the high-penalty (spike) region after one optimization step post-pruning."
+        help="Interval to log the research-related information."
     )
 
-    # what to prune
+    # pruning configurations
     parser.add_argument(
-        '--non_mask_name', 
+        '--pruning_params', 
         nargs='+', 
         type=str, 
-        default=["layernorm", "classifier", "pooler", "embedding", "bias", "prediction"],
-        help="The names of the modules that should not be pruned. We will match the names using regex."
+        default=[ 
+            "bert.encoder.layer.*.attention.self.query.weight",
+            "bert.encoder.layer.*.attention.self.key.weight",
+            "bert.encoder.layer.*.attention.self.value.weight",
+            "bert.encoder.layer.*.attention.output.dense.weight",
+            "bert.encoder.layer.*.intermediate.dense.weight",
+            "bert.encoder.layer.*.output.dense.weight",
+        ],
+        help="The names of the modules that should be pruned. We will match the names using regex."
     )
 
     args = parser.parse_args()
