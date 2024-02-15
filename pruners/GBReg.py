@@ -371,10 +371,6 @@ class GBReg(Algorithm):
                     magnitude_stat = self.magnitude_stat(state.model)
                     logger.log_metrics({"avg_during_initial_warmup": magnitude_stat["avg"],
                                         "std_during_initial_warmup": magnitude_stat["std"]})
-                elif self.pruning_start <= state.timestamp.batch.value <= self.pruning_end and mask is not None:
-                    magnitude_stat = self.magnitude_stat(state.model, mask)
-                    logger.log_metrics({"avg_during_gradual_pruning": magnitude_stat["avg"],
-                                        "std_during_gradual_pruning": magnitude_stat["std"]})
                 elif self.pruning_start <= state.timestamp.batch.value <= self.pruning_end and self.current_mask is not None:
                     magnitude_stat = self.magnitude_stat(state.model, self.current_mask)
                     logger.log_metrics({"avg_during_gradual_pruning_current_mask": magnitude_stat["avg"],
