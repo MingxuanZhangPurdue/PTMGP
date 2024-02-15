@@ -5,7 +5,7 @@ from composer.core import Algorithm, Event
 from pruners.utils_composer import _convert_timestr_to_int
 
 
-# Algorithm design principles: each individual function in general should  not check apply conditions, let the apply function do thats
+# Algorithm design principles: each individual function in general should not check apply conditions, let the apply function do that
 
 def _linear_scheduler(step, start, end, start_value, end_value):
     if start_value == end_value:
@@ -38,7 +38,7 @@ class GBReg(Algorithm):
             # value of sigma1
             sigma1=0.05,
             # initial value of sigma0
-            sigma0=1e-15,
+            sigma0=1e-13,
             # initial factor value for sigma0
             alpha_i_sigma0=1.0,
             # final factor value for sigma0
@@ -48,7 +48,7 @@ class GBReg(Algorithm):
             # end step of annealing for sigma0
             anneal_end_sigma0=None,
             # initial value of lambda_mix
-            lambda_mix=1e-4,
+            lambda_mix=1e-3,
             # initial factor value for lambda_mix
             alpha_i_lambda_mix=1.0,
             # final factor value for lambda_mix
@@ -70,8 +70,8 @@ class GBReg(Algorithm):
             # parmeter names that should not be considered for both pruning and regularization, matched by regular expression, if None, all parameters are considered
             pruning_params=None,
             # gradient norm clipping threshold, used during the final warmup stage if not None
-            clipping_threshold=1.0,
-            # interval for logging all research-related metrics
+            clipping_threshold=None,
+            # interval for logging all research-related metrics, if None, no logging will be performed
             log_interval=None,
         ):
 
