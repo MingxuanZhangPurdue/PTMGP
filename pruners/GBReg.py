@@ -7,12 +7,6 @@ from pruners.utils_composer import _convert_timestr_to_int
 
 # Algorithm design principles: each individual function in general should not check apply conditions, let the apply function do that
 
-# cooldown before sparse-fine-tune
-
-# lr with rewinds
-
-# 10ep
-
 def _linear_scheduler(step, start, end, start_value, end_value):
     if start_value == end_value:
         return start_value
@@ -23,18 +17,6 @@ def _linear_scheduler(step, start, end, start_value, end_value):
     else:
         frac_of_total = min(1.0, (step - start) / (end - start))
         current_factor = start_value + frac_of_total * (end_value - start_value)
-        return current_factor
-    
-def _cubic_scheduler(step, start, end, start_value, end_value):
-    if start_value == end_value:
-        return start_value
-    elif step <= start:
-        return start_value
-    elif step >= end:
-        return end_value
-    else:
-        frac_of_total = min(1.0, (step - start) / (end - start))
-        current_factor = start_value + frac_of_total**3 * (end_value - start_value)
         return current_factor
     
 def _count_mask_differences(mask1, mask2):
