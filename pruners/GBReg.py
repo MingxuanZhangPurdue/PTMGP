@@ -19,6 +19,18 @@ def _linear_scheduler(step, start, end, start_value, end_value):
         current_factor = start_value + frac_of_total * (end_value - start_value)
         return current_factor
     
+def _cubic_scheduler(step, start, end, start_value, end_value):
+    if start_value == end_value:
+        return start_value
+    elif step <= start:
+        return start_value
+    elif step >= end:
+        return end_value
+    else:
+        frac_of_total = min(1.0, (step - start) / (end - start))
+        current_factor = start_value + frac_of_total**3 * (end_value - start_value)
+        return current_factor
+    
 def _count_mask_differences(mask1, mask2):
     n_same = 0
     n_total = 0
