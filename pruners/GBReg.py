@@ -330,7 +330,7 @@ class GBReg(Algorithm):
                 n_param_below_prior_threshold = self.count_params_below_prior_threshold(state.model, self.current_prior_threshold)
                 logger.log_metrics({"model/n_param_remained": int(n_param_below_prior_threshold)})
             # perform magnitude pruning
-            ratio, mask_threshold, mask = self.magnitude_pruning(state.model, state.train_step_index)
+            ratio, mask_threshold, mask = self.magnitude_pruning(state.model, train_step_index)
             # log the current remaining ratio
             if logger is not None:
                 logger.log_metrics({"model/remaining_ratio": float(ratio)})
@@ -340,12 +340,12 @@ class GBReg(Algorithm):
             # log how mask corresponds to the final ratio changes during the gradual pruning stage
             if (self.log_interval is not None and
                 logger is not None and
-                state.train_step_index >= self.pruning_start and
-                state.train_step_index <= self.pruning_end):
-                if state.train_step_index == self.pruning_start:
+                train_step_index >= self.pruning_start and
+                train_step_index <= self.pruning_end):
+                if train_step_index == self.pruning_start:
                     mask_threshold, is_dict = self.calculate_mask_threshold(state.model, self.final_ratio)
                     self.after_initial_warmup_mask = self.create_mask(state.model, mask_threshold, is_dict)
-                if state.train_step_index> self.pruning_start and state.train_step_index % self.log_interval == 0:
+                if train_step_index> self.pruning_start and train_step_index % self.log_interval == 0:
                     mask_threshold, is_dict = self.calculate_mask_threshold(state.model, self.final_ratio)
                     updated_mask = self.create_mask(state.model, mask_threshold, is_dict)
                     if self.current_mask is not None:
@@ -358,8 +358,8 @@ class GBReg(Algorithm):
             # log the parameter's magnitude statistics during the initial warmup stage
             if (self.log_interval is not None and
                 logger is not None and
-                state.train_step_index < self.pruning_start and
-                state.train_step_index % self.log_interval == 0
+                train_step_index < self.pruning_start and
+                train_step_index % self.log_interval == 0
                 ):
                 magnitude_stat = self.magnitude_stat(state.model)
                 logger.log_metrics({"model/magnitude_mean": magnitude_stat["avg"],
