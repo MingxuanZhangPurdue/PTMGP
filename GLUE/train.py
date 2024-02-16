@@ -61,7 +61,7 @@ def float_and_none(value):
         return float(value)
     except ValueError:
         # If conversion to float fails, return the value as a string
-        if value == "none".casefold():
+        if value.casefold() == "none".casefold():
             return None
         else:
             raise ValueError(f"Unsupported value type {value}")
