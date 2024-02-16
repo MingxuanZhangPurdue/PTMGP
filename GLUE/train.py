@@ -50,7 +50,7 @@ def str_int_and_none(value):
         return int(value)
     except ValueError:
         # If conversion to int fails, return the value as a string
-        if value == "none".casefold():
+        if value.casefold() == "none".casefold():
             return None
         else:
             return value
@@ -386,7 +386,7 @@ def parse_args():
         default=1e-15, 
         help="The smaller variance of the Mixture Gaussian prior."
     )
-    
+
     parser.add_argument(
         "--sigma1",             
         type=float,            
