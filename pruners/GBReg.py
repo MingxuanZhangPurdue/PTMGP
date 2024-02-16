@@ -132,6 +132,8 @@ class GBReg(Algorithm):
             sigma0=args.sigma0,
             sigma1=args.sigma1,
             lambda_mix=args.lambda_mix,
+            alpha_i_lambda_mix=args.alpha_i_lambda_mix,
+            alpha_f_lambda_mix=args.alpha_f_lambda_mix,
             initial_ratio=args.initial_ratio,
             final_ratio=args.final_ratio,
             initial_warmup_steps=initial_warmup_steps,
