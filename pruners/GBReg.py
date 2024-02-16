@@ -119,7 +119,7 @@ class GBReg(Algorithm):
         self.pruning_steps = pruning_end - pruning_start
         self.pruning_interval = pruning_interval
 
-
+    # initialize the algorithm from the command line arguments
     @classmethod
     def from_args(self, train_size, max_train_steps, train_dataloader_len, args):
         initial_warmup_steps = _convert_timestr_to_int(args.initial_warmup_steps, max_train_steps, train_dataloader_len)
