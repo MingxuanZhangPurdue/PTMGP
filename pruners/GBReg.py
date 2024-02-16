@@ -7,6 +7,12 @@ from pruners.utils_composer import _convert_timestr_to_int
 
 # Algorithm design principles: each individual function in general should not check apply conditions, let the apply function do that
 
+# cooldown before sparse-fine-tune
+
+# lr with rewinds
+
+# 10ep
+
 def _linear_scheduler(step, start, end, start_value, end_value):
     if start_value == end_value:
         return start_value
