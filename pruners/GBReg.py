@@ -81,6 +81,8 @@ class GBReg(Algorithm):
             log_interval=None,
         ):
 
+        self.num_total_params_for_pruning = 0
+
         self.after_initial_warmup_mask = None
         self.current_mask = None
         self.final_fixed_mask = None
@@ -277,9 +279,11 @@ class GBReg(Algorithm):
     
     def print_pruning_modules(self, model):
         print ("list of model modules to be pruned:")
-        for n, _ in model.named_parameters():
+        for n, p in model.named_parameters():
             if self.whether_prune_param(n):
                 print (n)
+                self.num_total_params_for_pruning += p.numel()
+        print ("total number of candidate parameters for pruning:", self.num_total_params_for_pruning)
 
     def match(self, event, state):
         return event in [Event.FIT_START, Event.AFTER_TRAIN_BATCH, Event.BATCH_END]
@@ -329,11 +333,13 @@ class GBReg(Algorithm):
                 train_step_index % self.pruning_interval == 0):
                 n_param_below_prior_threshold = self.count_params_below_prior_threshold(state.model, self.current_prior_threshold)
                 logger.log_metrics({"model/n_param_remained": int(n_param_below_prior_threshold)})
+                logger.log_metrics({"model/percent_remained": float(n_param_below_prior_threshold/self.num_total_params_for_pruning)})
             # perform magnitude pruning
             ratio, mask_threshold, mask = self.magnitude_pruning(state.model, train_step_index)
             # log the current remaining ratio
             if logger is not None:
                 logger.log_metrics({"model/remaining_ratio": float(ratio)})
+                logger.log_metrics({"model/sparsity": float(1 - ratio)})
                 # if the current mask threshold is not None, log the current mask threshold
                 if mask_threshold is not None:
                     logger.log_metrics({"model/mask_threshold": float(mask_threshold)})
