@@ -327,7 +327,8 @@ class GBReg(Algorithm):
             self.print_pruning_modules(state.model)
             # log the parameter's magnitude statistics of the pre-trained model
             if (self.log_interval is not None and 
-                logger is not None):
+                logger is not None and
+                state.timestamp.batch.value == 0):
                 magnitude_stat = self.magnitude_stat(state.model)
                 logger.log_metrics({"magnitude_mean": magnitude_stat["avg"],
                                     "magnitude_std":  magnitude_stat["std"]})
