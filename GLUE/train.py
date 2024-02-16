@@ -381,36 +381,17 @@ def parse_args():
 
     # GBReg
     parser.add_argument(
-        "--sigma1",             
-        type=float,            
-        default=0.1,   
-        help="The larger variance of the Mixture Gaussian prior."
-    )
-
-    parser.add_argument(
         "--sigma0",             
         type=float,            
         default=1e-15, 
         help="The smaller variance of the Mixture Gaussian prior."
     )
+    
     parser.add_argument(
-        "--alpha_i_sigma0",    
+        "--sigma1",             
         type=float,            
-        default=1.0,   
-        help="The initial factor value of the sigma0."
-    )
-    parser.add_argument(
-        "--alpha_f_sigma0",     
-        type=float,            
-        default=1.0,   
-        help="The final factor value of the sigma0."
-    )
-    parser.add_argument(
-        "--anneal_type_sigma0",
-        type=str,
-        default="linear",
-        help="The annealing scheduler type of the sigma0, can be linear or cubic.",
-        choices=["linear", "cubic"]
+        default=0.1,   
+        help="The larger variance of the Mixture Gaussian prior."
     )
     
     parser.add_argument(
@@ -430,13 +411,6 @@ def parse_args():
         type=float,            
         default=1.0,   
         help="The final factor value of the lambda_mix."
-    )
-    parser.add_argument(
-        "--anneal_type_lambda_mix",
-        type=str,
-        default="linear",
-        help="The annealing scheduler type of the lambda_mix, can be linear or cubic.",
-        choices=["linear", "cubic"]
     )
 
     # logging interval for GBReg
