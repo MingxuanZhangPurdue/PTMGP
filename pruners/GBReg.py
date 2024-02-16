@@ -286,25 +286,27 @@ class GBReg(Algorithm):
 
     def apply(self, event, state, logger):
         if event == Event.FIT_START:
+            train_step_index = state.timestamp.batch.value
             # print the list of model modules to be pruned
             self.print_pruning_modules(state.model)
             # log the parameter's magnitude statistics of the pre-trained model
             if (self.log_interval is not None and 
                 logger is not None and
-                state.timestamp.batch.value == 0):
+                train_step_index == 0):
                 magnitude_stat = self.magnitude_stat(state.model)
                 logger.log_metrics({"model/magnitude_mean": magnitude_stat["avg"],
                                     "model/magnitude_std":  magnitude_stat["std"]})
             # in case we resume training from a checkpoint after the gradual pruning stage, we need to generate the final fixed mask first
-            if (state.timestamp.batch.value > self.pruning_end and 
+            if (train_step_index > self.pruning_end and 
                 self.final_fixed_mask is None):
                 print ("generate the final fixed mask first...")
                 mask_threshold, is_dict = self.calculate_mask_threshold(state.model, self.final_ratio)
                 self.final_fixed_mask = self.create_mask(state.model, mask_threshold, is_dict)
         elif event == Event.AFTER_TRAIN_BATCH:
+            train_step_index = state.timestamp.batch.value
             # add prior gradients to the model during the gradual pruning stage
-            if state.timestamp.batch.value <= self.pruning_end:
-                prior_threshold, sigma0, sigma1, lambda_mix = self.add_prior_grad(state.model, state.timestamp.batch.value)
+            if train_step_index <= self.pruning_end:
+                prior_threshold, sigma0, sigma1, lambda_mix = self.add_prior_grad(state.model, train_step_index)
                 if logger is not None:
                     logger.log_metrics({"prior/sigma0": float(sigma0)})
                     logger.log_metrics({"prior/sigma1": float(sigma1)})
@@ -312,7 +314,7 @@ class GBReg(Algorithm):
                     logger.log_metrics({"prior/prior_threshold": float(prior_threshold)})
                 self.current_prior_threshold = prior_threshold
             # perform gradient clipping during the final warmup stage
-            if (state.timestamp.batch.value > self.pruning_end and 
+            if (train_step_index > self.pruning_end and 
                 self.clipping_threshold is not None):
                 grad_norm = self.gradient_clipping(state.model, self.final_fixed_mask)
                 if logger is not None:
