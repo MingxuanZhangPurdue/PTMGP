@@ -296,7 +296,7 @@ class GBReg(Algorithm):
                 logger.log_metrics({"model/magnitude_mean": magnitude_stat["avg"],
                                     "model/magnitude_std":  magnitude_stat["std"]})
             # in case we resume training from a checkpoint after the gradual pruning stage, we need to generate the final fixed mask first
-            if (state.timestamp.batch.value > self.pruning_end and 
+            if (state.timestamp.batch.value >= self.pruning_end and 
                 self.final_fixed_mask is None):
                 print ("generate the final fixed mask first...")
                 mask_threshold, is_dict = self.calculate_mask_threshold(state.model, self.final_ratio)
