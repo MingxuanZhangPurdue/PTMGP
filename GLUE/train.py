@@ -406,16 +406,11 @@ def parse_args():
         help="The final factor value of the sigma0."
     )
     parser.add_argument(
-        "--anneal_start_sigma0",       
-        type=str_int_and_none,
-        default=None,  
-        help="The number of traing batches/steps for sigma0 annealing to start."
-    )
-    parser.add_argument(
-        "--anneal_end_sigma0",         
-        type=str_int_and_none,  
-        default=None,  
-        help="The number of traing batches/steps for sigma0 annealing to end."
+        "--anneal_type_sigma0",
+        type=str,
+        default="linear",
+        help="The annealing scheduler type of the sigma0, can be linear or cubic.",
+        choices=["linear", "cubic"]
     )
     
     parser.add_argument(
@@ -437,16 +432,11 @@ def parse_args():
         help="The final factor value of the lambda_mix."
     )
     parser.add_argument(
-        "--anneal_start_lambda_mix",       
-        type=str_int_and_none,
-        default=None,  
-        help="The number of traing batches/steps for lambda_mix annealing to start."
-    )
-    parser.add_argument(
-        "--anneal_end_lambda_mix",         
-        type=str_int_and_none,  
-        default=None,  
-        help="The number of traing batches/steps for lambda_mix annealing to end."
+        "--anneal_type_lambda_mix",
+        type=str,
+        default="linear",
+        help="The annealing scheduler type of the lambda_mix, can be linear or cubic.",
+        choices=["linear", "cubic"]
     )
 
     # logging interval for GBReg

@@ -51,24 +51,20 @@ class GBReg(Algorithm):
             sigma1=0.05,
             # initial value of sigma0
             sigma0=1e-13,
-            # initial factor value for sigma0
+            # initial factor value of sigma0
             alpha_i_sigma0=1.0,
-            # final factor value for sigma0
+            # final factor value of sigma0
             alpha_f_sigma0=1.0,
-            # start step of annealing for sigma0
-            anneal_start_sigma0=None,
-            # end step of annealing for sigma0
-            anneal_end_sigma0=None,
-            # initial value for lambda_mix
+            # annealing scheduler type for sigma0, either "linear" or "cubic"
+            anneal_type_sigma0="linear",
+            # initial value of lambda_mix
             lambda_mix=1e-3,
-            # initial factor value for lambda_mix
+            # initial factor value of lambda_mix
             alpha_i_lambda_mix=1.0,
-            # final factor value for lambda_mix
+            # final factor value of lambda_mix
             alpha_f_lambda_mix=1.0,
-            # start step of annealing for lambda_mix
-            anneal_start_lambda_mix=None,
-            # end step of annealing for lambda_mix
-            anneal_end_lambda_mix=None,
+            # annealing scheduler type for lambda_mix, either "linear" or "cubic"
+            anneal_type_lambda_mix="linear",
             # initial remaining ratio, if set to less than 1.0, will prune the model to this ratio at the beginning of the graudal pruning stage
             initial_ratio=0.7,
             # target remaining ratio, i.e., final_ratio = 1 - the target sparsity
@@ -119,14 +115,12 @@ class GBReg(Algorithm):
         self.sigma0 = sigma0
         self.alpha_i_sigma0 = alpha_i_sigma0
         self.alpha_f_sigma0 = alpha_f_sigma0
-        self.anneal_start_sigma0 = anneal_start_sigma0 if anneal_start_sigma0 is not None else pruning_start
-        self.anneal_end_sigma0 = anneal_end_sigma0 if anneal_end_sigma0 is not None else pruning_end
+        self.anneal_type_sigma0 = anneal_type_sigma0
 
         self.lambda_mix = lambda_mix
         self.alpha_i_lambda_mix = alpha_i_lambda_mix
         self.alpha_f_lambda_mix = alpha_f_lambda_mix
-        self.anneal_start_lambda_mix = anneal_start_lambda_mix if anneal_start_lambda_mix is not None else pruning_start
-        self.anneal_end_lambda_mix = anneal_end_lambda_mix if anneal_end_lambda_mix is not None else pruning_end
+        self.anneal_type_lambda_mix = anneal_type_lambda_mix
     
         self.pruning_start = pruning_start
         self.pruning_end = pruning_end
@@ -139,10 +133,6 @@ class GBReg(Algorithm):
         initial_warmup_steps = _convert_timestr_to_int(args.initial_warmup_steps, max_train_steps, train_dataloader_len)
         final_warmup_steps = _convert_timestr_to_int(args.final_warmup_steps, max_train_steps, train_dataloader_len)
         pruning_interval = _convert_timestr_to_int(args.pruning_interval, max_train_steps, train_dataloader_len)
-        anneal_start_sigma0 = _convert_timestr_to_int(args.anneal_start_sigma0, max_train_steps, train_dataloader_len) if args.anneal_start_sigma0 is not None else None
-        anneal_end_sigma0 = _convert_timestr_to_int(args.anneal_end_sigma0, max_train_steps, train_dataloader_len) if args.anneal_end_sigma0 is not None else None
-        anneal_start_lambda_mix = _convert_timestr_to_int(args.anneal_start_lambda_mix, max_train_steps, train_dataloader_len) if args.anneal_start_lambda_mix is not None else None
-        anneal_end_lambda_mix = _convert_timestr_to_int(args.anneal_end_lambda_mix, max_train_steps, train_dataloader_len) if args.anneal_end_lambda_mix is not None else None
         log_interval = _convert_timestr_to_int(args.log_interval, max_train_steps, train_dataloader_len) if args.log_interval is not None else None
         return self(
             train_size=train_size,
@@ -151,13 +141,11 @@ class GBReg(Algorithm):
             sigma0=args.sigma0,
             alpha_i_sigma0=args.alpha_i_sigma0,
             alpha_f_sigma0=args.alpha_f_sigma0,
-            anneal_start_sigma0=anneal_start_sigma0,
-            anneal_end_sigma0=anneal_end_sigma0,
+            anneal_type_sigma0 = args.anneal_type_sigma0,
             lambda_mix=args.lambda_mix,
             alpha_i_lambda_mix=args.alpha_i_lambda_mix,
             alpha_f_lambda_mix=args.alpha_f_lambda_mix,
-            anneal_start_lambda_mix=anneal_start_lambda_mix,
-            anneal_end_lambda_mix=anneal_end_lambda_mix,
+            anneal_type_lambda_mix = args.anneal_type_lambda_mix,
             initial_ratio=args.initial_ratio,
             final_ratio=args.final_ratio,
             initial_warmup_steps=initial_warmup_steps,
@@ -175,20 +163,38 @@ class GBReg(Algorithm):
             return bool(re.search(self.pruning_params, n))
         
     def prior_annealing_scheduler(self, train_step_index):
-        sigma0_factor = _linear_scheduler(
-            train_step_index,
-            self.anneal_start_sigma0,
-            self.anneal_end_sigma0,
-            self.alpha_i_sigma0, 
-            self.alpha_f_sigma0
-        )
-        lambda_mix_factor = _linear_scheduler(
-            train_step_index, 
-            self.anneal_start_lambda_mix, 
-            self.anneal_end_lambda_mix, 
-            self.alpha_i_lambda_mix, 
-            self.alpha_f_lambda_mix
-        )
+        if self.anneal_type_sigma0 == "linear":
+            sigma0_factor = _linear_scheduler(
+                train_step_index,
+                self.pruning_start,
+                self.pruning_end,
+                self.alpha_i_sigma0, 
+                self.alpha_f_sigma0
+            )
+        elif self.anneal_type_sigma0 == "cubic":
+            sigma0_factor = _cubic_scheduler(
+                train_step_index,
+                self.pruning_start,
+                self.pruning_end,
+                self.alpha_i_sigma0, 
+                self.alpha_f_sigma0
+            )
+        if self.anneal_type_lambda_mix == "linear":
+            lambda_mix_factor = _linear_scheduler(
+                train_step_index, 
+                self.pruning_start, 
+                self.pruning_end, 
+                self.alpha_i_lambda_mix, 
+                self.alpha_f_lambda_mix
+            )
+        elif self.anneal_type_lambda_mix == "cubic":
+            lambda_mix_factor = _cubic_scheduler(
+                train_step_index, 
+                self.pruning_start, 
+                self.pruning_end, 
+                self.alpha_i_lambda_mix, 
+                self.alpha_f_lambda_mix
+            )
         return sigma0_factor*self.sigma0, self.sigma1, lambda_mix_factor*self.lambda_mix
 
     def calculate_prior_grad_components(self, train_step_index):
