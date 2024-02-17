@@ -32,18 +32,30 @@ class GBReg(Algorithm):
             train_size,
             # total number of training steps
             max_train_steps,
-            # value of sigma0
+            # initial value of sigma0
             sigma0=1e-10,
-            # initial factor value of sigma0
+            # final factor value of sigma0
             alpha_f_sigma0=1.0,
-            # value of sigma1
+            # the training step to start annealing sigma0, if None, will start from the beginning of the gradual pruning stage
+            anneal_start_sigma0=None,
+            # the training step to end annealing sigma0, if None, will end at the end of the gradual pruning stage
+            anneal_end_sigma0=None,
+            # initial value of sigma1
             sigma1=0.05,
-            # initial factor value of sigma1
+            # final factor value of sigma1
             alpha_f_sigma1=1.0,
+            # the training step to start annealing sigma1, if None, will start from the beginning of the gradual pruning stage
+            anneal_start_sigma1=None,
+            # the training step to end annealing sigma1, if None, will end at the end of the gradual pruning stage
+            anneal_end_sigma1=None,
             # initial value of lambda_mix
             lambda_mix=1e-3,
             # final factor value of lambda_mix
             alpha_f_lambda_mix=1.0,
+            # the training step to start annealing lambda_mix, if None, will start from the beginning of the gradual pruning stage
+            anneal_start_lambda_mix=None,
+            # the training step to end annealing lambda_mix, if None, will end at the end of the gradual pruning stage
+            anneal_end_lambda_mix=None,
             # initial remaining ratio, if set to less than 1.0, will prune the model to this ratio at the beginning of the graudal pruning stage
             initial_ratio=1.0,
             # target remaining ratio, i.e., final_ratio = 1 - the target sparsity
@@ -89,21 +101,29 @@ class GBReg(Algorithm):
             "Condition pruning_start < pruning_end <= max_train_steps must be satisfied, but got False"
         )
 
-        if log_interval is not None:
-            assert log_interval % pruning_interval == 0, (
+        if log_interval is not None and log_interval % pruning_interval != 0:
+            print (
                 f"log_interval: {log_interval}, "
                 f"pruning_interval: {pruning_interval}. "
-                "When log_interval is not None, log_interval must be divisible by pruning_interval, but got False"
+                "When log_interval is not None, log_interval must be divisible by pruning_interval, otherwise, no logging will be done during the gradual pruning stage"
             )
         
         self.log_interval = log_interval
 
-        self.sigma1 = sigma1
-        self.alpha_f_sigma1 = alpha_f_sigma1
         self.sigma0 = sigma0
         self.alpha_f_sigma0 = alpha_f_sigma0
+        self.anneal_start_sigma0 = anneal_start_sigma0 if anneal_start_sigma0 is not None else pruning_start
+        self.anneal_end_sigma0 = anneal_end_sigma0 if anneal_end_sigma0 is not None else pruning_end
+
+        self.sigma1 = sigma1
+        self.alpha_f_sigma1 = alpha_f_sigma1
+        self.anneal_start_sigma1 = anneal_start_sigma1 if anneal_start_sigma1 is not None else pruning_start
+        self.anneal_end_sigma1 = anneal_end_sigma1 if anneal_end_sigma1 is not None else pruning_end
+
         self.lambda_mix = lambda_mix
         self.alpha_f_lambda_mix = alpha_f_lambda_mix
+        self.anneal_start_lambda_mix = anneal_start_lambda_mix if anneal_start_lambda_mix is not None else pruning_start
+        self.anneal_end_lambda_mix = anneal_end_lambda_mix if anneal_end_lambda_mix is not None else pruning_end
     
         self.pruning_start = pruning_start
         self.pruning_end = pruning_end
@@ -117,15 +137,27 @@ class GBReg(Algorithm):
         final_warmup_steps = _convert_timestr_to_int(args.final_warmup_steps, max_train_steps, train_dataloader_len)
         pruning_interval = _convert_timestr_to_int(args.pruning_interval, max_train_steps, train_dataloader_len)
         log_interval = _convert_timestr_to_int(args.log_interval, max_train_steps, train_dataloader_len) if args.log_interval is not None else None
+        anneal_start_sigma0 = _convert_timestr_to_int(args.anneal_start_sigma0, max_train_steps, train_dataloader_len) if args.anneal_start_sigma0 is not None else None
+        anneal_end_sigma0 = _convert_timestr_to_int(args.anneal_end_sigma0, max_train_steps, train_dataloader_len) if args.anneal_end_sigma0 is not None else None
+        anneal_start_sigma1 = _convert_timestr_to_int(args.anneal_start_sigma1, max_train_steps, train_dataloader_len) if args.anneal_start_sigma1 is not None else None
+        anneal_end_sigma1 = _convert_timestr_to_int(args.anneal_end_sigma1, max_train_steps, train_dataloader_len) if args.anneal_end_sigma1 is not None else None
+        anneal_start_lambda_mix = _convert_timestr_to_int(args.anneal_start_lambda_mix, max_train_steps, train_dataloader_len) if args.anneal_start_lambda_mix is not None else None
+        anneal_end_lambda_mix = _convert_timestr_to_int(args.anneal_end_lambda_mix, max_train_steps, train_dataloader_len) if args.anneal_end_lambda_mix is not None else None
         return self(
             train_size=train_size,
             max_train_steps=max_train_steps,
             sigma0=args.sigma0,
             alpha_f_sigma0=args.alpha_f_sigma0,
+            anneal_start_sigma0=anneal_start_sigma0,
+            anneal_end_sigma0=anneal_end_sigma0,
             sigma1=args.sigma1,
             alpha_f_sigma1=args.alpha_f_sigma1,
+            anneal_start_sigma1=anneal_start_sigma1,
+            anneal_end_sigma1=anneal_end_sigma1,
             lambda_mix=args.lambda_mix,
             alpha_f_lambda_mix=args.alpha_f_lambda_mix,
+            anneal_start_lambda_mix=anneal_start_lambda_mix,
+            anneal_end_lambda_mix=anneal_end_lambda_mix,
             initial_ratio=args.initial_ratio,
             final_ratio=args.final_ratio,
             initial_warmup_steps=initial_warmup_steps,
@@ -145,22 +177,22 @@ class GBReg(Algorithm):
     def prior_annealing_scheduler(self, train_step_index):
         sigma0_factor = _linear_scheduler(
             train_step_index, 
-            self.pruning_start, 
-            self.pruning_end, 
+            self.anneal_start_sigma0,
+            self.anneal_end_sigma0,
             1.0,
             self.alpha_f_sigma0
         )
         sigma1_factor = _linear_scheduler(
             train_step_index, 
-            self.pruning_start, 
-            self.pruning_end, 
+            self.anneal_start_sigma1, 
+            self.anneal_end_sigma1, 
             1.0,
             self.alpha_f_sigma1
         )
         lambda_mix_factor = _linear_scheduler(
             train_step_index, 
-            self.pruning_start, 
-            self.pruning_end, 
+            self.anneal_start_lambda_mix, 
+            self.anneal_end_lambda_mixs, 
             1.0,
             self.alpha_f_lambda_mix
         )

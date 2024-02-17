@@ -392,6 +392,18 @@ def parse_args():
         default=1.0,   
         help="The final factor value of the sigma0."
     )
+    parser.add_argument(
+        "--anneal_start_sigma0",
+        type=str_int_and_none,
+        default=None,
+        help="The start step to anneal the sigma0."
+    )
+    parser.add_argument(
+        "--anneal_end_sigma0",
+        type=str_int_and_none,
+        default=None,
+        help="The end step to anneal the sigma0."
+    )
 
     parser.add_argument(
         "--sigma1",             
@@ -405,6 +417,18 @@ def parse_args():
         default=1.0,   
         help="The final factor value of the sigma1."
     )
+    parser.add_argument(
+        "--anneal_start_sigma1",
+        type=str_int_and_none,
+        default=None,
+        help="The start step to anneal the sigma1."
+    )
+    parser.add_argument(
+        "--anneal_end_sigma1",
+        type=str_int_and_none,
+        default=None,
+        help="The end step to anneal the sigma1."
+    )
     
     parser.add_argument(
         "--lambda_mix",         
@@ -417,6 +441,18 @@ def parse_args():
         type=float,            
         default=1.0,   
         help="The final factor value of the lambda_mix."
+    )
+    parser.add_argument(
+        "--anneal_start_lambda_mix",
+        type=str_int_and_none,
+        default=None,
+        help="The start step to anneal the lambda_mix."
+    )
+    parser.add_argument(
+        "--anneal_end_lambda_mix",
+        type=str_int_and_none,
+        default=None,
+        help="The end step to anneal the lambda_mix."
     )
 
     # logging interval for GBReg
