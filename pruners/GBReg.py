@@ -319,12 +319,12 @@ class GBReg(Algorithm):
         return n_param_below_prior_threshold
     
     def print_pruning_modules(self, model):
-        print ("list of model modules to be pruned:")
+        print ("List of model modules to be pruned:")
         for n, p in model.named_parameters():
             if self.whether_prune_param(n):
                 print (n)
                 self.num_total_params_for_pruning += p.numel()
-        print ("total number of candidate parameters for pruning:", self.num_total_params_for_pruning)
+        print ("Total number of candidate parameters for pruning:", self.num_total_params_for_pruning)
 
     def match(self, event, state):
         return event in [Event.FIT_START, Event.AFTER_TRAIN_BATCH, Event.BATCH_END]
@@ -344,7 +344,7 @@ class GBReg(Algorithm):
             # in case we resume training from a checkpoint after the gradual pruning stage, we need to generate the final fixed mask first
             if (train_step_index > self.pruning_end and 
                 self.final_fixed_mask is None):
-                print ("generate the final fixed mask first...")
+                print ("Generate the final fixed mask first...")
                 mask_threshold, is_dict = self.calculate_mask_threshold(state.model, self.final_ratio)
                 self.final_fixed_mask = self.create_mask(state.model, mask_threshold, is_dict)
         elif event == Event.AFTER_TRAIN_BATCH:
