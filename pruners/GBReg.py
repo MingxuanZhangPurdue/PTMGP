@@ -105,7 +105,9 @@ class GBReg(Algorithm):
             print (
                 f"log_interval: {log_interval}, "
                 f"pruning_interval: {pruning_interval}. "
-                "When log_interval is not None, log_interval must be divisible by pruning_interval, otherwise, no logging will be done during the gradual pruning stage"
+                "When log_interval is not None, log_interval must be divisible by pruning_interval, "
+                "otherwise, only some of the metrics will be logged. "
+                "For more details, please refer to the apply function."
             )
         
         self.log_interval = log_interval
@@ -409,7 +411,7 @@ class GBReg(Algorithm):
                 magnitude_stat = self.magnitude_stat(state.model)
                 logger.log_metrics({"model/magnitude_mean": magnitude_stat["avg"],
                                     "model/magnitude_std":  magnitude_stat["std"]})
-            # log the remaining parameter's magnitude statistics during the gradual pruning stage
+            # log the remaining parameter's magnitude statistics during the gradual pruning stage and the final warmup stage
             if (self.log_interval is not None and
                 logger is not None and
                 train_step_index >= self.pruning_start and
