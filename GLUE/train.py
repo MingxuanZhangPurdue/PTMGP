@@ -386,6 +386,12 @@ def parse_args():
         default=1e-15, 
         help="The smaller variance of the Mixture Gaussian prior."
     )
+    parser.add_argument(
+        "--alpha_f_sigma0",     
+        type=float,            
+        default=1.0,   
+        help="The final factor value of the sigma0."
+    )
 
     parser.add_argument(
         "--sigma1",             
@@ -393,18 +399,18 @@ def parse_args():
         default=0.1,   
         help="The larger variance of the Mixture Gaussian prior."
     )
+    parser.add_argument(
+        "--alpha_f_sigma1",     
+        type=float,            
+        default=1.0,   
+        help="The final factor value of the sigma1."
+    )
     
     parser.add_argument(
         "--lambda_mix",         
         type=float,            
         default=1e-4,  
         help="The initial value of the mixing coefficient of the Mixture Gaussian prior."
-    )
-    parser.add_argument(
-        "--alpha_i_lambda_mix",    
-        type=float,            
-        default=1.0,   
-        help="The initial factor value of the lambda_mix."
     )
     parser.add_argument(
         "--alpha_f_lambda_mix",     
