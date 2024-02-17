@@ -4,9 +4,6 @@ import numpy as np
 from composer.core import Algorithm, Event
 from pruners.utils_composer import _convert_timestr_to_int
 
-
-# Algorithm design principles: each individual function in general should not check apply conditions, let the apply function do that
-
 def _linear_scheduler(step, start, end, start_value, end_value):
     if start_value == end_value:
         return start_value
@@ -37,16 +34,18 @@ class GBReg(Algorithm):
             max_train_steps,
             # value of sigma0
             sigma0=1e-10,
+            # initial factor value of sigma0
+            alpha_f_sigma0=1.0,
             # value of sigma1
             sigma1=0.05,
+            # initial factor value of sigma1
+            alpha_f_sigma1=1.0,
             # initial value of lambda_mix
             lambda_mix=1e-3,
-            # initial factor value of lambda_mix
-            alpha_i_lambda_mix=1.0,
             # final factor value of lambda_mix
             alpha_f_lambda_mix=1.0,
             # initial remaining ratio, if set to less than 1.0, will prune the model to this ratio at the beginning of the graudal pruning stage
-            initial_ratio=0.7,
+            initial_ratio=1.0,
             # target remaining ratio, i.e., final_ratio = 1 - the target sparsity
             final_ratio=0.1,
             # number of steps for the initial warmup stage
@@ -93,9 +92,10 @@ class GBReg(Algorithm):
         )
 
         self.sigma1 = sigma1
+        self.alpha_f_sigma1 = alpha_f_sigma1
         self.sigma0 = sigma0
+        self.alpha_f_sigma0 = alpha_f_sigma0
         self.lambda_mix = lambda_mix
-        self.alpha_i_lambda_mix = alpha_i_lambda_mix
         self.alpha_f_lambda_mix = alpha_f_lambda_mix
     
         self.pruning_start = pruning_start
@@ -114,9 +114,10 @@ class GBReg(Algorithm):
             train_size=train_size,
             max_train_steps=max_train_steps,
             sigma0=args.sigma0,
+            alpha_f_sigma0=args.alpha_f_sigma0,
             sigma1=args.sigma1,
+            alpha_f_sigma1=args.alpha_f_sigma1,
             lambda_mix=args.lambda_mix,
-            alpha_i_lambda_mix=args.alpha_i_lambda_mix,
             alpha_f_lambda_mix=args.alpha_f_lambda_mix,
             initial_ratio=args.initial_ratio,
             final_ratio=args.final_ratio,
@@ -135,14 +136,28 @@ class GBReg(Algorithm):
             return bool(re.search(self.pruning_params, n))
         
     def prior_annealing_scheduler(self, train_step_index):
+        sigma0_factor = _linear_scheduler(
+            train_step_index, 
+            self.pruning_start, 
+            self.pruning_end, 
+            1.0,
+            self.alpha_f_sigma0
+        )
+        sigma1_factor = _linear_scheduler(
+            train_step_index, 
+            self.pruning_start, 
+            self.pruning_end, 
+            1.0,
+            self.alpha_f_sigma1
+        )
         lambda_mix_factor = _linear_scheduler(
             train_step_index, 
             self.pruning_start, 
             self.pruning_end, 
-            self.alpha_i_lambda_mix, 
+            1.0,
             self.alpha_f_lambda_mix
         )
-        return self.sigma0, self.sigma1, lambda_mix_factor*self.lambda_mix
+        return sigma0_factor*self.sigma0, sigma1_factor*self.sigma1, lambda_mix_factor*self.lambda_mix
 
     def calculate_prior_grad_components(self, train_step_index):
         sigma0, sigma1, lambda_mix = self.prior_annealing_scheduler(train_step_index)
@@ -239,12 +254,15 @@ class GBReg(Algorithm):
                 if self.whether_prune_param(n):
                     p.data.masked_fill_(mask[n], 0.0)
     
-    def magnitude_stat(self, model):
+    def magnitude_stat(self, model, mask=None):
         magnitude_vector = []
         with torch.no_grad():
             for n, p in model.named_parameters():
                 if self.whether_prune_param(n):
-                    magnitude_vector.append(p.abs().detach().view(-1))
+                    if mask is not None:
+                        magnitude_vector.append(p.abs().detach()[~mask[n]].view(-1))
+                    else:
+                        magnitude_vector.append(p.abs().detach().view(-1))
         magnitude_vector = torch.cat(magnitude_vector)
         magnitude_stat = {}
         magnitude_stat["avg"] = float(magnitude_vector.mean())
@@ -352,3 +370,17 @@ class GBReg(Algorithm):
                 magnitude_stat = self.magnitude_stat(state.model)
                 logger.log_metrics({"model/magnitude_mean": magnitude_stat["avg"],
                                     "model/magnitude_std":  magnitude_stat["std"]})
+            # log the remaining parameter's magnitude statistics during the gradual pruning stage
+            if (self.log_interval is not None and
+                logger is not None and
+                train_step_index >= self.pruning_start and
+                train_step_index % self.log_interval == 0
+                ):
+                if train_step_index <= self.pruning_end and mask is not None:
+                    magnitude_stat = self.magnitude_stat(state.model, mask)
+                    logger.log_metrics({"model/remaining_magnitude_mean": magnitude_stat["avg"],
+                                        "model/remaining_magnitude_std":  magnitude_stat["std"]})
+                elif train_step_index > self.pruning_end and self.final_fixed_mask is not None:
+                    magnitude_stat = self.magnitude_stat(state.model, self.final_fixed_mask)
+                    logger.log_metrics({"model/remaining_magnitude_mean": magnitude_stat["avg"],
+                                        "model/remaining_magnitude_std":  magnitude_stat["std"]})
