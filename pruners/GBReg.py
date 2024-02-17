@@ -84,6 +84,13 @@ class GBReg(Algorithm):
         pruning_start = initial_warmup_steps
         pruning_end = max_train_steps - final_warmup_steps
 
+        if log_interval is not None:
+            assert log_interval % pruning_interval == 0, (
+                f"log_interval: {log_interval}, "
+                f"pruning_interval: {pruning_interval}. "
+                "When log_interval is not None, log_interval must be divisible by pruning_interval, but got False"
+            )
+
         assert pruning_start < pruning_end <= max_train_steps, (
             f"pruning_start: {pruning_start}, "
             f"pruning_end: {pruning_end}, "
