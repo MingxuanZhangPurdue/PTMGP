@@ -192,7 +192,7 @@ class GBReg(Algorithm):
         lambda_mix_factor = _linear_scheduler(
             train_step_index, 
             self.anneal_start_lambda_mix, 
-            self.anneal_end_lambda_mixs, 
+            self.anneal_end_lambda_mix, 
             1.0,
             self.alpha_f_lambda_mix
         )
