@@ -318,7 +318,7 @@ class GBReg(Algorithm):
                     n_param_below_prior_threshold += (p.abs() < prior_threshold).sum().item()
         return n_param_below_prior_threshold
     
-    def get_grad_norm(self, model, mask=None):
+    def get_grad_norms(self, model, mask=None):
         candidate_grads = []
         other_grads = []
         with torch.no_grad():
@@ -445,10 +445,10 @@ class GBReg(Algorithm):
                 logger is not None and
                 train_step_index % self.log_interval == 0
                 ):
-                if train_step_index <= self.start:
-                    remaining_candidate_grad_norm, other_grad_norm, all_grad_norm = self.get_grad_norm(state.model)
-                elif train_step_index > self.start and mask is not None:
-                    remaining_candidate_grad_norm, other_grad_norm, all_grad_norm = self.get_grad_norm(state.model, mask)
+                if train_step_index <= self.pruning_start:
+                    remaining_candidate_grad_norm, other_grad_norm, all_grad_norm = self.get_grad_norms(state.model)
+                elif train_step_index > self.pruning_start and mask is not None:
+                    remaining_candidate_grad_norm, other_grad_norm, all_grad_norm = self.get_grad_norms(state.model, mask)
                 logger.log_metrics({"model/remaining_candidate_grad_norm": float(remaining_candidate_grad_norm)})
                 logger.log_metrics({"model/other_grad_norm": float(other_grad_norm)})
                 logger.log_metrics({"model/all_grad_norm": float(all_grad_norm)})
