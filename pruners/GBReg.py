@@ -319,16 +319,21 @@ class GBReg(Algorithm):
         return n_param_below_prior_threshold
     
     def get_grad_norm(self, model, mask=None):
+        candidate_grads = []
+        other_grads = []
         with torch.no_grad():
             for n, p in model.named_parameters():
                 if self.whether_prune_param(n):
                     if mask is not None:
-                        param_norm = p.grad.detach()[~mask[n]].view(-1).norm(2)
+                        candidate_grads.append(p.grad.detach()[~mask[n]].flatten())
                     else:
-                        param_norm = p.grad.detach().view(-1).norm(2)
-                    total_norm += param_norm.item() ** 2
-                total_norm = total_norm ** (1. / 2)
-        return total_norm
+                        candidate_grads.append(p.grad.detach().flatten())
+                else:
+                    other_grads.append(p.grad.detach().flatten())
+            candidate_grad_norm = torch.cat(candidate_grads).norm(2).item()
+            other_grad_norm = torch.cat(other_grads).norm(2).item()
+            all_grad_norm = (candidate_grad_norm**2+other_grad_norm**2)**0.5
+        return candidate_grad_norm, other_grad_norm, all_grad_norm
     
     def print_pruning_modules(self, model):
         print ("List of model modules to be pruned:")
@@ -371,11 +376,9 @@ class GBReg(Algorithm):
                     logger.log_metrics({"prior/prior_threshold": float(prior_threshold)})
                 self.current_prior_threshold = prior_threshold
             # perform gradient clipping during the final warmup stage
-            if (train_step_index > self.pruning_end and 
+            if (train_step_index > self.pruning_end and
                 self.clipping_threshold is not None):
-                grad_norm = self.gradient_clipping(state.model, self.final_fixed_mask)
-                if logger is not None:
-                    logger.log_metrics({"model/grad_norm": float(grad_norm)})
+                self.gradient_clipping(state.model, self.final_fixed_mask)
         elif event == Event.BATCH_END:
             train_step_index = state.timestamp.batch.value - 1
             # log the count of parameters remaining in the high-penalty region (spike) from the last pruning step right before the next pruning step
@@ -437,11 +440,15 @@ class GBReg(Algorithm):
                     magnitude_stat = self.magnitude_stat(state.model, self.final_fixed_mask)
                     logger.log_metrics({"model/remaining_magnitude_mean": magnitude_stat["avg"],
                                         "model/remaining_magnitude_std":  magnitude_stat["std"]})
-                    
-            # log the remaining parameter's gradient norm
+            # log the parameter's gradient norm
             if (self.log_interval is not None and
                 logger is not None and
                 train_step_index % self.log_interval == 0
                 ):
-                grad_norm = self.get_grad_norm(state.model, mask)
-                logger.log_metrics({"model/remaining_grad_norm": float(grad_norm)})
+                if train_step_index <= self.start:
+                    remaining_candidate_grad_norm, other_grad_norm, all_grad_norm = self.get_grad_norm(state.model)
+                elif train_step_index > self.start and mask is not None:
+                    remaining_candidate_grad_norm, other_grad_norm, all_grad_norm = self.get_grad_norm(state.model, mask)
+                logger.log_metrics({"model/remaining_candidate_grad_norm": float(remaining_candidate_grad_norm)})
+                logger.log_metrics({"model/other_grad_norm": float(other_grad_norm)})
+                logger.log_metrics({"model/all_grad_norm": float(all_grad_norm)})
