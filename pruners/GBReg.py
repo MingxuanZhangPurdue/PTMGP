@@ -318,6 +318,18 @@ class GBReg(Algorithm):
                     n_param_below_prior_threshold += (p.abs() < prior_threshold).sum().item()
         return n_param_below_prior_threshold
     
+    def get_grad_norm(self, model, mask=None):
+        with torch.no_grad():
+            for n, p in model.named_parameters():
+                if self.whether_prune_param(n):
+                    if mask is not None:
+                        param_norm = p.grad.detach()[~mask[n]].view(-1).norm(2)
+                    else:
+                        param_norm = p.grad.detach().view(-1).norm(2)
+                    total_norm += param_norm.item() ** 2
+                total_norm = total_norm ** (1. / 2)
+        return total_norm
+    
     def print_pruning_modules(self, model):
         print ("List of model modules to be pruned:")
         for n, p in model.named_parameters():
@@ -425,3 +437,11 @@ class GBReg(Algorithm):
                     magnitude_stat = self.magnitude_stat(state.model, self.final_fixed_mask)
                     logger.log_metrics({"model/remaining_magnitude_mean": magnitude_stat["avg"],
                                         "model/remaining_magnitude_std":  magnitude_stat["std"]})
+                    
+            # log the remaining parameter's gradient norm
+            if (self.log_interval is not None and
+                logger is not None and
+                train_step_index % self.log_interval == 0
+                ):
+                grad_norm = self.get_grad_norm(state.model, mask)
+                logger.log_metrics({"model/remaining_grad_norm": float(grad_norm)})
