@@ -80,7 +80,7 @@ class GBReg(Algorithm):
         self.after_initial_warmup_mask = None
         self.current_mask = None
         self.final_fixed_mask = None
-        self.current_prior_threshold = None
+        self.current_prior_threshold = 0.0
         self.current_ratio_mask = None
 
         self.train_size = train_size

@@ -12,7 +12,7 @@ composer -m -n 1 GLUE.train \
   --lr_scheduler linear_with_warmup \
   --t_warmup 0.0ba \
   --alpha_f 0.1 \
-  --clipping_threshold none \
+  --clipping_threshold 1.0 \
   --sigma0 1e-10 \
   --sigma1 0.05 \
   --lambda_mix 0.9 \
