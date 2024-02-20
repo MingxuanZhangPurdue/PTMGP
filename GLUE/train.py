@@ -373,6 +373,12 @@ def parse_args():
         help="The number of training batches/steps for final warmup."
     )
     parser.add_argument(
+        "--sparse_finetune_steps",       
+        type=str_int_and_none,   
+        default=0,     
+        help="The number of training batches/steps for sparse finetuning."
+    )
+    parser.add_argument(
         "--pruning_interval",             
         type=str_int_and_none,   
         default=10,    

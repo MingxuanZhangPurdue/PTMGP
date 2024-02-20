@@ -1,6 +1,6 @@
 import torch
+import math
 import re
-import numpy as np
 from composer.core import Algorithm, Event
 from pruners.utils_composer import _convert_timestr_to_int
 
@@ -68,18 +68,20 @@ class GBReg(Algorithm):
             pruning_interval=10,
             # parmeter names that should not be considered for both pruning and regularization, matched by regular expression, if None, all parameters are considered
             pruning_params=None,
-            # gradient norm clipping threshold, used during the final warmup stage if not None
+            # gradient norm clipping threshold, for more details, please refer to both the apply and the gradient_clipping functions
             clipping_threshold=None,
+            # number of steps for the sparse fine-tuning stage, i.e., fine-tuning the pruned model with fixed mask
+            sparse_finetune_steps=0,
             # interval for logging all research-related metrics, if None, no logging will be performed
             log_interval=None,
         ):
 
-        self.num_total_params_for_pruning = 0
-
+        self.num_total_params_for_pruning = None
         self.after_initial_warmup_mask = None
         self.current_mask = None
         self.final_fixed_mask = None
         self.current_prior_threshold = None
+        self.current_ratio_mask = None
 
         self.train_size = train_size
         self.max_train_steps = max_train_steps
@@ -92,13 +94,15 @@ class GBReg(Algorithm):
         self.final_ratio = final_ratio
 
         pruning_start = initial_warmup_steps
-        pruning_end = max_train_steps - final_warmup_steps
+        final_warmup_start = max_train_steps - sparse_finetune_steps - final_warmup_steps
+        pruning_end = max_train_steps - sparse_finetune_steps
 
-        assert pruning_start < pruning_end <= max_train_steps, (
+        assert pruning_start < final_warmup_start <= pruning_end <= max_train_steps, (
             f"pruning_start: {pruning_start}, "
+            f"final_warmup_start: {final_warmup_start}, "
             f"pruning_end: {pruning_end}, "
             f"max_train_steps: {max_train_steps}. "
-            "Condition pruning_start < pruning_end <= max_train_steps must be satisfied, but got False"
+            "Condition pruning_start < final_warmup_start <= pruning_end <= max_train_steps must be satisfied, but got False"
         )
 
         if log_interval is not None and log_interval % pruning_interval != 0:
@@ -115,21 +119,22 @@ class GBReg(Algorithm):
         self.sigma0 = sigma0
         self.alpha_f_sigma0 = alpha_f_sigma0
         self.anneal_start_sigma0 = anneal_start_sigma0 if anneal_start_sigma0 is not None else pruning_start
-        self.anneal_end_sigma0 = anneal_end_sigma0 if anneal_end_sigma0 is not None else pruning_end
+        self.anneal_end_sigma0 = anneal_end_sigma0 if anneal_end_sigma0 is not None else final_warmup_start
 
         self.sigma1 = sigma1
         self.alpha_f_sigma1 = alpha_f_sigma1
         self.anneal_start_sigma1 = anneal_start_sigma1 if anneal_start_sigma1 is not None else pruning_start
-        self.anneal_end_sigma1 = anneal_end_sigma1 if anneal_end_sigma1 is not None else pruning_end
+        self.anneal_end_sigma1 = anneal_end_sigma1 if anneal_end_sigma1 is not None else final_warmup_start
 
         self.lambda_mix = lambda_mix
         self.alpha_f_lambda_mix = alpha_f_lambda_mix
         self.anneal_start_lambda_mix = anneal_start_lambda_mix if anneal_start_lambda_mix is not None else pruning_start
-        self.anneal_end_lambda_mix = anneal_end_lambda_mix if anneal_end_lambda_mix is not None else pruning_end
+        self.anneal_end_lambda_mix = anneal_end_lambda_mix if anneal_end_lambda_mix is not None else final_warmup_start
     
         self.pruning_start = pruning_start
+        self.final_warmup_start = final_warmup_start
         self.pruning_end = pruning_end
-        self.pruning_steps = pruning_end - pruning_start
+        self.remaining_ratio_scheduler_steps = final_warmup_start - pruning_start
         self.pruning_interval = pruning_interval
 
     # initialize the algorithm from the command line arguments
@@ -137,6 +142,7 @@ class GBReg(Algorithm):
     def from_args(self, train_size, max_train_steps, train_dataloader_len, args):
         initial_warmup_steps = _convert_timestr_to_int(args.initial_warmup_steps, max_train_steps, train_dataloader_len)
         final_warmup_steps = _convert_timestr_to_int(args.final_warmup_steps, max_train_steps, train_dataloader_len)
+        sparse_finetune_steps = _convert_timestr_to_int(args.sparse_finetune_steps, max_train_steps, train_dataloader_len)
         pruning_interval = _convert_timestr_to_int(args.pruning_interval, max_train_steps, train_dataloader_len)
         log_interval = _convert_timestr_to_int(args.log_interval, max_train_steps, train_dataloader_len) if args.log_interval is not None else None
         anneal_start_sigma0 = _convert_timestr_to_int(args.anneal_start_sigma0, max_train_steps, train_dataloader_len) if args.anneal_start_sigma0 is not None else None
@@ -164,6 +170,7 @@ class GBReg(Algorithm):
             final_ratio=args.final_ratio,
             initial_warmup_steps=initial_warmup_steps,
             final_warmup_steps=final_warmup_steps,
+            sparse_finetune_steps=sparse_finetune_steps,
             pruning_interval=pruning_interval,
             pruning_params=args.pruning_params,
             clipping_threshold=args.clipping_threshold,
@@ -200,30 +207,34 @@ class GBReg(Algorithm):
         )
         return sigma0_factor*self.sigma0, sigma1_factor*self.sigma1, lambda_mix_factor*self.lambda_mix
 
-    def calculate_prior_grad_components(self, train_step_index):
+    def compute_prior_grad_components(self, train_step_index):
         sigma0, sigma1, lambda_mix = self.prior_annealing_scheduler(train_step_index)
-        c1 = np.log(lambda_mix) - np.log(1 - lambda_mix) + 0.5 * np.log(sigma0) - 0.5 * np.log(sigma1)
+        c1 = math.log(lambda_mix) - math.log(1 - lambda_mix) + 0.5 * math.log(sigma0) - 0.5 * math.log(sigma1)
         c2 = 0.5 / sigma0 - 0.5 / sigma1
-        prior_threshold = np.sqrt(np.log((1 - lambda_mix) / lambda_mix * np.sqrt(sigma1 / sigma0)) / (
+        prior_threshold = math.sqrt(math.log((1 - lambda_mix) / lambda_mix * math.sqrt(sigma1 / sigma0)) / (
                     0.5 / sigma0 - 0.5 / sigma1))
         return c1, c2, prior_threshold, sigma0, sigma1, lambda_mix
     
-    def add_prior_grad(self, model, train_step_index):
-        c1, c2, prior_threshold, sigma0, sigma1, lambda_mix = self.calculate_prior_grad_components(train_step_index)
+    def apply_prior_grad(self, model, train_step_index):
+        c1, c2, prior_threshold, sigma0, sigma1, lambda_mix = self.compute_prior_grad_components(train_step_index)
         with torch.no_grad():
             for n, p in model.named_parameters():
                 if self.whether_prune_param(n):
-                    temp = p.pow(2).mul(c2).add(c1).exp().add(1).pow(-1)
-                    temp = temp.mul((sigma0-sigma1)/(self.train_size*sigma0*sigma1)).add((-1)/(self.train_size*sigma1))
-                    p.grad -= p.mul(temp)
+                    p.grad.sub_(
+                        p.mul(
+                            p.pow(2).mul(c2).add(c1).exp().add(1).pow(-1)
+                            .mul((sigma0-sigma1)/(self.train_size*sigma0*sigma1))
+                            .add((-1)/(self.train_size*sigma1))
+                        )
+                    )
         return prior_threshold, sigma0, sigma1, lambda_mix
     
     def calculate_mask_threshold(self, model, ratio):
+        # is stands for importance score, in this case, the absolute value of the parameter
         is_dict = {}
-        with torch.no_grad():
-            for n, p in model.named_parameters():
-                if self.whether_prune_param(n):
-                    is_dict[n] = p.abs().detach()
+        for n, p in model.named_parameters():
+            if self.whether_prune_param(n):
+                is_dict[n] = p.detach().abs()
         all_is = torch.cat([is_dict[n].view(-1) for n in is_dict])
         mask_threshold = torch.kthvalue(all_is, int(all_is.shape[0] * (1 - ratio)))[0].item()
         return mask_threshold, is_dict
@@ -269,41 +280,49 @@ class GBReg(Algorithm):
         elif train_step_index == self.pruning_start:
             ratio = self.initial_ratio
             mask_ind = True
+        elif self.pruning_start < train_step_index < self.final_warmup_start:
+            mul_coeff = 1 - (train_step_index - self.pruning_start) / (self.remaining_ratio_scheduler_steps)
+            ratio = self.final_ratio + (self.initial_ratio - self.final_ratio) * (mul_coeff ** 3)
+            mask_ind = True if train_step_index % self.pruning_interval == 0 else False
+        elif self.final_warmup_start <= train_step_index < self.pruning_end:
+            ratio = self.final_ratio
+            mask_ind = True #if train_step_index % self.pruning_interval == 0 else False
         elif train_step_index >= self.pruning_end:
             ratio = self.final_ratio
             mask_ind = True
-        else:
-            mul_coeff = 1 - (train_step_index - self.pruning_start) / (self.pruning_steps)
-            ratio = self.final_ratio + (self.initial_ratio - self.final_ratio) * (mul_coeff ** 3)
-            mask_ind = True if train_step_index % self.pruning_interval == 0 else False
         return ratio, mask_ind
     
-    def zero_masked_param_grad(self, model, mask):
-        with torch.no_grad():
-            for n, p in model.named_parameters():
-                if self.whether_prune_param(n):
-                    p.grad.masked_fill_(mask[n], 0.0)
-    
     def gradient_clipping(self, model, mask):
-        self.zero_masked_param_grad(model, mask)
-        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=self.clipping_threshold).item()
-        return grad_norm
-    
+        grads = []
+        for n, p in model.named_parameters():
+            if self.whether_prune_param(n):
+                grads.append(p.grad.detach()[~mask[n]].view(-1))
+            else:
+                grads.append(p.grad.detach().view(-1))
+        total_norm = torch.cat(grads).norm(2).item()
+        clip_coef = self.clipping_threshold / (total_norm + 1e-6)
+        clip_coef = min(1, clip_coef)
+        for n, p in model.named_parameters():
+            if self.whether_prune_param(n):
+                p.grad.detach()[~mask[n]] = p.grad.detach()[~mask[n]] * clip_coef
+            else:
+                p.grad.detach().mul_(clip_coef)
+        return total_norm
+            
     def prune_with_fixed_mask(self, model, mask):
         with torch.no_grad():
             for n, p in model.named_parameters():
                 if self.whether_prune_param(n):
-                    p.data.masked_fill_(mask[n], 0.0)
+                    p.masked_fill_(mask[n], 0.0)
     
     def magnitude_stat(self, model, mask=None):
         magnitude_vector = []
-        with torch.no_grad():
-            for n, p in model.named_parameters():
-                if self.whether_prune_param(n):
-                    if mask is not None:
-                        magnitude_vector.append(p.abs().detach()[~mask[n]].view(-1))
-                    else:
-                        magnitude_vector.append(p.abs().detach().view(-1))
+        for n, p in model.named_parameters():
+            if self.whether_prune_param(n):
+                if mask is not None:
+                    magnitude_vector.append(p.detach().abs()[~mask[n]].view(-1))
+                else:
+                    magnitude_vector.append(p.detach().abs().view(-1))
         magnitude_vector = torch.cat(magnitude_vector)
         magnitude_stat = {}
         magnitude_stat["avg"] = float(magnitude_vector.mean())
@@ -325,11 +344,11 @@ class GBReg(Algorithm):
             for n, p in model.named_parameters():
                 if self.whether_prune_param(n):
                     if mask is not None:
-                        candidate_grads.append(p.grad.detach()[~mask[n]].flatten())
+                        candidate_grads.append(p.grad.detach()[~mask[n]].view(-1))
                     else:
-                        candidate_grads.append(p.grad.detach().flatten())
+                        candidate_grads.append(p.grad.detach().view(-1))
                 else:
-                    other_grads.append(p.grad.detach().flatten())
+                    other_grads.append(p.grad.detach().view(-1))
             candidate_grad_norm = torch.cat(candidate_grads).norm(2).item()
             other_grad_norm = torch.cat(other_grads).norm(2).item()
             all_grad_norm = (candidate_grad_norm**2+other_grad_norm**2)**0.5
@@ -368,7 +387,7 @@ class GBReg(Algorithm):
             train_step_index = state.timestamp.batch.value
             # add prior gradients to the model during the gradual pruning stage
             if train_step_index <= self.pruning_end:
-                prior_threshold, sigma0, sigma1, lambda_mix = self.add_prior_grad(state.model, train_step_index)
+                prior_threshold, sigma0, sigma1, lambda_mix = self.apply_prior_grad(state.model, train_step_index)
                 if logger is not None:
                     logger.log_metrics({"prior/sigma0": float(sigma0)})
                     logger.log_metrics({"prior/sigma1": float(sigma1)})
@@ -376,9 +395,10 @@ class GBReg(Algorithm):
                     logger.log_metrics({"prior/prior_threshold": float(prior_threshold)})
                 self.current_prior_threshold = prior_threshold
             # perform gradient clipping during the final warmup stage
-            if (train_step_index > self.pruning_end and
-                self.clipping_threshold is not None):
-                self.gradient_clipping(state.model, self.final_fixed_mask)
+            if (train_step_index > self.pruning_start and
+                self.clipping_threshold is not None and
+                self.current_ratio_mask is not None):
+                self.gradient_clipping(state.model, self.current_ratio_mask)
         elif event == Event.BATCH_END:
             train_step_index = state.timestamp.batch.value - 1
             # log the count of parameters remaining in the high-penalty region (spike) from the last pruning step right before the next pruning step
@@ -392,6 +412,8 @@ class GBReg(Algorithm):
                 logger.log_metrics({"model/percent_remained": float(n_param_below_prior_threshold/self.num_total_params_for_pruning)})
             # perform magnitude pruning
             ratio, mask_threshold, mask = self.magnitude_pruning(state.model, train_step_index)
+            if mask is not None:
+                self.current_ratio_mask = mask
             # log the current remaining ratio
             if logger is not None:
                 logger.log_metrics({"model/remaining_ratio": float(ratio)})
