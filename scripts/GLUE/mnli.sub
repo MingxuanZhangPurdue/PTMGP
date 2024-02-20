@@ -1,0 +1,34 @@
+#!/bin/bash
+
+seed=47
+ratio=0.1
+
+composer -m -n 1 GLUE.train \
+  --wandb_project_name GLUE \
+  --task_name mnli \
+  --max_duration 8ep \
+  --per_device_train_batch_size 32 \
+  --learning_rate 5e-5 \
+  --lr_scheduler linear_with_warmup \
+  --t_warmup 0.0ba \
+  --alpha_f 0.1 \
+  --clipping_threshold none \
+  --sigma0 1e-10 \
+  --sigma1 0.05 \
+  --lambda_mix 0.9 \
+  --alpha_f_lambda_mix 0.0001 \
+  --alpha_f_sigma1 1.0 \
+  --alpha_f_sigma0 1.0 \
+  --initial_warmup_steps 1ep \
+  --final_warmup_steps 1ep \
+  --pruning_interval 10 \
+  --seed ${seed} \
+  --initial_ratio 0.7 \
+  --final_ratio ${ratio} \
+  --run_name mnli_${ratio}_GBReg_${seed}_92 \
+  --save_folder ./checkpoints/GLUE/mnli/${ratio}/GBReg_${seed}_92 \
+  --save_interval 0.05dur \
+  --eval_interval 0.05dur \
+  --log_interval 500 \
+  --autoresume
+
