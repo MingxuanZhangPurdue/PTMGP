@@ -76,7 +76,7 @@ class GBReg(Algorithm):
             log_interval=None,
         ):
 
-        self.num_total_params_for_pruning = None
+        self.num_total_params_for_pruning = 0
         self.after_initial_warmup_mask = None
         self.current_mask = None
         self.final_fixed_mask = None
