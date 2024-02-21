@@ -26,8 +26,10 @@ class RelativeLinearScheduler(ComposerScheduler):
         t_end = _convert_time(self.t_end, state)
         current_time = state.timestamp.get(t_start.unit)
         frac_of_total = min(1.0, ((current_time - t_start)/(t_end - t_start)).value)
-        assert 0.0 <= frac_of_total <= 1.0, \
-            f"frac_of_total must be between 0 and 1, but got {frac_of_total}, this may be due to current_time being outside of the range [t_start, t_end]"
+        assert 0.0 <= frac_of_total <= 1.0, (
+            f"frac_of_total must be between 0 and 1, but got {frac_of_total}, "
+            f"this may be due to current_time: {current_time} being outside of the range [{self.t_start}, {self.t_end}]"
+        )
         current_factor = self.alpha_i + frac_of_total * (self.alpha_f - self.alpha_i)
         return current_factor
 

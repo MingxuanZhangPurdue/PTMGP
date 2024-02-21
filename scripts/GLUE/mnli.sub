@@ -20,8 +20,8 @@ composer -m -n 1 GLUE.train \
   --alpha_f_sigma1 1.0 \
   --alpha_f_sigma0 1.0 \
   --initial_warmup_steps 1ep \
-  --final_warmup_steps 0ba \
-  --sparse_finetune_steps 1ep \
+  --final_warmup_steps 1ep \
+  --sparse_finetune_steps 0ba \
   --pruning_interval 10 \
   --seed ${seed} \
   --initial_ratio 0.7 \
@@ -31,5 +31,6 @@ composer -m -n 1 GLUE.train \
   --save_interval 0.05dur \
   --eval_interval 0.05dur \
   --log_interval 500 \
-  --autoresume
+  --save_overwrite \
+  --load_path ./checkpoints/GLUE/mnli/${ratio}/GBReg_${seed}_92/ep6-ba83436-rank0.pt
 
