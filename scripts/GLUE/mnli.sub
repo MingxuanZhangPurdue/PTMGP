@@ -20,7 +20,8 @@ composer -m -n 1 GLUE.train \
   --alpha_f_sigma1 1.0 \
   --alpha_f_sigma0 1.0 \
   --initial_warmup_steps 1ep \
-  --final_warmup_steps 1ep \
+  --final_warmup_steps 0ba \
+  --sparse_finetune_steps 1ep \
   --pruning_interval 10 \
   --seed ${seed} \
   --initial_ratio 0.7 \

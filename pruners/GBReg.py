@@ -286,7 +286,7 @@ class GBReg(Algorithm):
             mask_ind = True if train_step_index % self.pruning_interval == 0 else False
         elif self.final_warmup_start <= train_step_index < self.pruning_end:
             ratio = self.final_ratio
-            mask_ind = True #if train_step_index % self.pruning_interval == 0 else False
+            mask_ind = True if train_step_index % self.pruning_interval == 0 else False
         elif train_step_index >= self.pruning_end:
             ratio = self.final_ratio
             mask_ind = True
