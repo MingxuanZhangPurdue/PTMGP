@@ -435,8 +435,8 @@ class GBReg(Algorithm):
                 logger is not None and
                 train_step_index == 0):
                 magnitude_stat = self.magnitude_stat(state.model)
-                logger.log_metrics({"model/all_magnitude_mean": magnitude_stat["avg"],
-                                    "model/all_magnitude_std":  magnitude_stat["std"]})
+                logger.log_metrics({"model/remaining_candidate_magnitude_mean": magnitude_stat["avg"],
+                                    "model/remaining_candidate_magnitude_std":  magnitude_stat["std"]})
             # in case we resume training from a checkpoint after the gradual pruning stage, we need to generate the final fixed mask first
             if (train_step_index > self.pruning_end and 
                 self.final_fixed_mask is None):
@@ -468,8 +468,7 @@ class GBReg(Algorithm):
                 train_step_index <= self.pruning_end and
                 train_step_index % self.pruning_interval == 0):
                 n_param_below_prior_threshold = self.count_param_below_prior_threshold(state.model, self.current_prior_threshold)
-                logger.log_metrics({"model/n_param_remained": int(n_param_below_prior_threshold)})
-                logger.log_metrics({"model/percent_remained": float(n_param_below_prior_threshold/self.n_total_param_for_pruning)})
+                logger.log_metrics({"prior/percent_remained": float(n_param_below_prior_threshold/self.n_total_param_for_pruning)})
             # perform magnitude pruning
             sparsity, mask_threshold, mask = self.magnitude_pruning(state.model, train_step_index)
             if mask is not None:
@@ -498,29 +497,19 @@ class GBReg(Algorithm):
                         n_diff = _count_mask_differences(self.after_initial_warmup_mask, updated_mask)
                         logger.log_metrics({"model/n_mask_diff_wrt_initial_warmup_mask": int(n_diff)})
                     self.current_mask = updated_mask
-            # log the parameter's magnitude statistics during the initial warmup stage
+            # log the remaining parameter's magnitude statistics during training
             if (self.log_interval is not None and
                 logger is not None and
-                train_step_index < self.pruning_start and
                 train_step_index % self.log_interval == 0
                 ):
-                magnitude_stat = self.magnitude_stat(state.model)
-                logger.log_metrics({"model/all_magnitude_mean": magnitude_stat["avg"],
-                                    "model/all_magnitude_std":  magnitude_stat["std"]})
-            # log the remaining parameter's magnitude statistics during the gradual pruning stage and the final warmup stage
-            if (self.log_interval is not None and
-                logger is not None and
-                train_step_index >= self.pruning_start and
-                train_step_index % self.log_interval == 0
-                ):
-                if train_step_index <= self.pruning_end and mask is not None:
+                if train_step_index < self.pruning_start:
+                    magnitude_stat = self.magnitude_stat(state.model)
+                elif self.pruning_start <= train_step_index <= self.pruning_end and mask is not None:
                     magnitude_stat = self.magnitude_stat(state.model, mask)
-                    logger.log_metrics({"model/remaining_magnitude_mean": magnitude_stat["avg"],
-                                        "model/remaining_magnitude_std":  magnitude_stat["std"]})
                 elif train_step_index > self.pruning_end and self.final_fixed_mask is not None:
                     magnitude_stat = self.magnitude_stat(state.model, self.final_fixed_mask)
-                    logger.log_metrics({"model/remaining_magnitude_mean": magnitude_stat["avg"],
-                                        "model/remaining_magnitude_std":  magnitude_stat["std"]})
+                logger.log_metrics({"model/remaining_candidate_magnitude_mean": magnitude_stat["avg"],
+                                    "model/remaining_candidate_magnitude_std":  magnitude_stat["std"]})
             # log the parameter's gradient norm
             if (self.log_interval is not None and
                 logger is not None and
