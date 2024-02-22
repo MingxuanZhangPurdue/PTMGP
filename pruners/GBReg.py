@@ -337,8 +337,8 @@ class GBReg(Algorithm):
             sparsity = self.initial_sparsity
             pruning_ind = True
         elif self.pruning_start < train_step_index < self.final_warmup_start:
-            frac_of_total = (train_step_index - self.pruning_start) / (self.final_warmup_start - self.pruning_start)
-            sparsity = self.initial_sparsity + (self.final_sparsity - self.initial_sparsity) * (frac_of_total ** 3)
+            frac_of_total = 1 - (train_step_index - self.pruning_start) / (self.final_warmup_start - self.pruning_start)
+            sparsity = self.final_sparsity + (self.initial_sparsity - self.final_sparsity) * (frac_of_total ** 3)
             pruning_ind = True if train_step_index % self.pruning_interval == 0 else False
         elif self.final_warmup_start <= train_step_index < self.pruning_end:
             sparsity = self.final_sparsity
