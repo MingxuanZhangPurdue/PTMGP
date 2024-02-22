@@ -12,8 +12,8 @@ def _power_scheduler(step, start, end, start_value, end_value, power=1.0):
         if start_value == end_value:
             return start_value
         else:
-            frac_of_total = (step - start) / (end - start)
-            current_value = start_value + (end_value - start_value) * (frac_of_total ** power)
+            frac_of_total = 1 - (step - start) / (end - start)
+            current_value = end_value + (start_value - end_value) * (frac_of_total ** power)
             return current_value
     elif step >= end:
         return end_value

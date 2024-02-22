@@ -5,9 +5,9 @@ from composer.optim.scheduler import ComposerScheduler, _convert_time
 class RelativeLinearScheduler(ComposerScheduler):
     def __init__(self,
                  t_start: Union[str, Time] = '0dur',
-                 t_end: Union[str, Time] = '1dur', 
+                 t_end: Union[str, Time] = '1dur',
                  alpha_i: float = 1.0,
-                 alpha_f: float = 0.0, 
+                 alpha_f: float = 0.0,
                  ):
         self.alpha_i = alpha_i
         self.alpha_f = alpha_f
