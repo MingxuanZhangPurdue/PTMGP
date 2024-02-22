@@ -409,9 +409,9 @@ class GBReg(Algorithm):
                     remaining_candidate_grads.append(p.grad.detach().view(-1))
             else:
                 remaining_non_candidate_grads.append(p.grad.detach().view(-1))
-            remaining_candidate_grad_norm = torch.cat(remaining_candidate_grads).norm(2).item()
-            remaining_non_candidate_grad_norm = torch.cat(remaining_non_candidate_grads).norm(2).item()
-            remaining_total_grad_norm = (remaining_candidate_grad_norm**2 + remaining_non_candidate_grad_norm**2)**0.5
+        remaining_candidate_grad_norm = torch.cat(remaining_candidate_grads).norm(2).item()
+        remaining_non_candidate_grad_norm = torch.cat(remaining_non_candidate_grads).norm(2).item()
+        remaining_total_grad_norm = (remaining_candidate_grad_norm**2 + remaining_non_candidate_grad_norm**2)**0.5
         return remaining_candidate_grad_norm, remaining_non_candidate_grad_norm, remaining_total_grad_norm
     
     def print_pruning_modules(self, model):
