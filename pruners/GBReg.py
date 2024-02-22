@@ -435,8 +435,8 @@ class GBReg(Algorithm):
                 logger is not None and
                 train_step_index == 0):
                 magnitude_stat = self.magnitude_stat(state.model)
-                logger.log_metrics({"model/magnitude_mean": magnitude_stat["avg"],
-                                    "model/magnitude_std":  magnitude_stat["std"]})
+                logger.log_metrics({"model/all_magnitude_mean": magnitude_stat["avg"],
+                                    "model/all_magnitude_std":  magnitude_stat["std"]})
             # in case we resume training from a checkpoint after the gradual pruning stage, we need to generate the final fixed mask first
             if (train_step_index > self.pruning_end and 
                 self.final_fixed_mask is None):
