@@ -137,6 +137,11 @@ class GBReg(Algorithm):
             "Condition pruning_start < final_warmup_start <= pruning_end <= max_train_steps must be satisfied, but got False"
         )
 
+        self.pruning_start = pruning_start
+        self.final_warmup_start = final_warmup_start
+        self.pruning_end = pruning_end
+        self.pruning_interval = pruning_interval
+
         self.n_total_param_for_pruning = 0
         self.after_initial_warmup_mask = None
         self.current_mask = None
@@ -149,11 +154,12 @@ class GBReg(Algorithm):
 
         self.clipping_start = clipping_start if clipping_start is not None else pruning_end + 1
         self.clipping_threshold = clipping_threshold
-        assert self.clipping_start > self.pruning_start, (
-            f"clipping_start: {self.clipping_start}, "
-            f"pruning_start: {self.pruning_start}. "
-            "gradient clipping will start before a pruning mask is generated!"
-        )
+        if self.clipping_start is not None:
+            assert self.clipping_start > self.pruning_start, (
+                f"clipping_start: {self.clipping_start}, "
+                f"pruning_start: {self.pruning_start}. "
+                "gradient clipping will start before a pruning mask is generated!"
+            )
 
         self.pruning_params = re.compile("|".join(pruning_params), re.IGNORECASE) if pruning_params is not None else None
 
@@ -206,11 +212,6 @@ class GBReg(Algorithm):
             self.anneal_end_lambda_mix is None):
             print ("No annealing for lambda_mix will be performed.")
             self.anneal_lambda_mix = False
-    
-        self.pruning_start = pruning_start
-        self.final_warmup_start = final_warmup_start
-        self.pruning_end = pruning_end
-        self.pruning_interval = pruning_interval
 
     # initialize the algorithm from the command line arguments
     @classmethod
