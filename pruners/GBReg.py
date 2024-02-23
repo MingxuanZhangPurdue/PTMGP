@@ -370,7 +370,7 @@ class GBReg(Algorithm):
             pruning_ind = True if train_step_index % self.pruning_interval == 0 else False
         elif self.final_warmup_start <= train_step_index < self.pruning_end:
             sparsity = self.final_sparsity
-            pruning_ind = True #if train_step_index % self.pruning_interval == 0 else False
+            pruning_ind = True
         elif train_step_index >= self.pruning_end:
             sparsity = self.final_sparsity
             pruning_ind = True
