@@ -6,15 +6,14 @@ from composer.core import Algorithm, Event
 from pruners.utils_composer import _convert_timestr_to_int
 
 def _power_scheduler(step, start, end, start_value, end_value, power=1.0):
+    if start_value == end_value:
+        return start_value
     if step <= start:
         return start_value
     elif start < step < end:
-        if start_value == end_value:
-            return start_value
-        else:
-            frac_of_total = 1 - (step - start) / (end - start)
-            current_value = end_value + (start_value - end_value) * (frac_of_total ** power)
-            return current_value
+        frac_of_total = 1 - (step - start) / (end - start)
+        current_value = end_value + (start_value - end_value) * (frac_of_total ** power)
+        return current_value
     elif step >= end:
         return end_value
     else:
@@ -30,7 +29,6 @@ def _count_mask_differences(mask1, mask2):
     return n_diff
 
 class GBReg(Algorithm):
-
     """
     Args:
         train_size (int): Total number of training samples.
@@ -167,22 +165,40 @@ class GBReg(Algorithm):
         self.alpha_i_sigma0 = alpha_i_sigma0
         self.alpha_f_sigma0 = alpha_f_sigma0
         self.anneal_power_sigma0 = anneal_power_sigma0
-        self.anneal_start_sigma0 = anneal_start_sigma0 if anneal_start_sigma0 is not None else pruning_start
-        self.anneal_end_sigma0 = anneal_end_sigma0 if anneal_end_sigma0 is not None else final_warmup_start
+        self.anneal_start_sigma0 = anneal_start_sigma0
+        self.anneal_end_sigma0 = anneal_end_sigma0
+        self.anneal_sigma0 = True
+        if (self.alpha_f_sigma0 == self.alpha_f_sigma0 == 1.0 or 
+            self.anneal_start_sigma0 is None or
+            self.anneal_end_sigma0 is None):
+            print ("No annealing for sigma0 will be performed.")
+            self.anneal_sigma0 = False
 
         self.sigma1 = sigma1
         self.alpha_i_sigma1 = alpha_i_sigma1
         self.alpha_f_sigma1 = alpha_f_sigma1
         self.anneal_power_sigma1 = anneal_power_sigma1
-        self.anneal_start_sigma1 = anneal_start_sigma1 if anneal_start_sigma1 is not None else pruning_start
-        self.anneal_end_sigma1 = anneal_end_sigma1 if anneal_end_sigma1 is not None else final_warmup_start
+        self.anneal_start_sigma1 = anneal_start_sigma1
+        self.anneal_end_sigma1 = anneal_end_sigma1
+        self.anneal_sigma1 = True
+        if (self.alpha_f_sigma1 == self.alpha_f_sigma1 == 1.0 or 
+            self.anneal_start_sigma1 is None or
+            self.anneal_end_sigma1 is None):
+            print ("No annealing for sigma1 will be performed.")
+            self.anneal_sigma1 = False
 
         self.lambda_mix = lambda_mix
         self.alpha_i_lambda_mix = alpha_i_lambda_mix
         self.alpha_f_lambda_mix = alpha_f_lambda_mix
         self.anneal_power_lambda_mix = anneal_power_lambda_mix
-        self.anneal_start_lambda_mix = anneal_start_lambda_mix if anneal_start_lambda_mix is not None else pruning_start
-        self.anneal_end_lambda_mix = anneal_end_lambda_mix if anneal_end_lambda_mix is not None else final_warmup_start
+        self.anneal_start_lambda_mix = anneal_start_lambda_mix
+        self.anneal_end_lambda_mix = anneal_end_lambda_mix
+        self.anneal_lambda_mix = True
+        if (self.alpha_f_lambda_mix == self.alpha_f_lambda_mix == 1.0 or
+            self.anneal_start_lambda_mix is None or
+            self.anneal_end_lambda_mix is None):
+            print ("No annealing for lambda_mix will be performed.")
+            self.anneal_lambda_mix = False
     
         self.pruning_start = pruning_start
         self.final_warmup_start = final_warmup_start
@@ -242,30 +258,42 @@ class GBReg(Algorithm):
             return bool(re.search(self.pruning_params, n))
         
     def prior_annealing_scheduler(self, train_step_index):
-        sigma0_factor = _power_scheduler(
-            train_step_index, 
-            self.anneal_start_sigma0,
-            self.anneal_end_sigma0,
-            self.alpha_i_sigma0,
-            self.alpha_f_sigma0,
-            self.anneal_power_sigma0
-        )
-        sigma1_factor = _power_scheduler(
-            train_step_index, 
-            self.anneal_start_sigma1, 
-            self.anneal_end_sigma1, 
-            self.alpha_i_sigma1,
-            self.alpha_f_sigma1,
-            self.anneal_power_sigma1
-        )
-        lambda_mix_factor = _power_scheduler(
-            train_step_index, 
-            self.anneal_start_lambda_mix, 
-            self.anneal_end_lambda_mix, 
-            self.alpha_i_lambda_mix,
-            self.alpha_f_lambda_mix,
-            self.anneal_power_lambda_mix
-        )
+        if self.anneal_sigma0:
+            sigma0_factor = _power_scheduler(
+                train_step_index, 
+                self.anneal_start_sigma0,
+                self.anneal_end_sigma0,
+                self.alpha_i_sigma0,
+                self.alpha_f_sigma0,
+                self.anneal_power_sigma0
+            )
+        else:
+            sigma0_factor = 1.0
+
+        if self.anneal_sigma1:
+            sigma1_factor = _power_scheduler(
+                train_step_index, 
+                self.anneal_start_sigma1, 
+                self.anneal_end_sigma1, 
+                self.alpha_i_sigma1,
+                self.alpha_f_sigma1,
+                self.anneal_power_sigma1
+            )
+        else:
+            sigma1_factor = 1.0
+
+        if self.anneal_lambda_mix:
+            lambda_mix_factor = _power_scheduler(
+                train_step_index, 
+                self.anneal_start_lambda_mix, 
+                self.anneal_end_lambda_mix, 
+                self.alpha_i_lambda_mix,
+                self.alpha_f_lambda_mix,
+                self.anneal_power_lambda_mix
+            )
+        else:
+            lambda_mix_factor = 1.0
+
         return sigma0_factor*self.sigma0, sigma1_factor*self.sigma1, lambda_mix_factor*self.lambda_mix
     
     def apply_prior_grad(self, model, train_step_index):
@@ -342,7 +370,7 @@ class GBReg(Algorithm):
             pruning_ind = True if train_step_index % self.pruning_interval == 0 else False
         elif self.final_warmup_start <= train_step_index < self.pruning_end:
             sparsity = self.final_sparsity
-            pruning_ind = True if train_step_index % self.pruning_interval == 0 else False
+            pruning_ind = True #if train_step_index % self.pruning_interval == 0 else False
         elif train_step_index >= self.pruning_end:
             sparsity = self.final_sparsity
             pruning_ind = True
@@ -468,7 +496,7 @@ class GBReg(Algorithm):
                 train_step_index <= self.pruning_end and
                 train_step_index % self.pruning_interval == 0):
                 n_param_below_prior_threshold = self.count_param_below_prior_threshold(state.model, self.current_prior_threshold)
-                logger.log_metrics({"prior/percent_remained": float(n_param_below_prior_threshold/self.n_total_param_for_pruning)})
+                logger.log_metrics({"model/percent_remained_in_spike": float(n_param_below_prior_threshold/self.n_total_param_for_pruning)})
             # perform magnitude pruning
             sparsity, mask_threshold, mask = self.magnitude_pruning(state.model, train_step_index)
             if mask is not None:
@@ -495,7 +523,7 @@ class GBReg(Algorithm):
                         logger.log_metrics({"model/n_mask_diff_wrt_current_mask": int(n_diff)})
                     if self.after_initial_warmup_mask is not None:
                         n_diff = _count_mask_differences(self.after_initial_warmup_mask, updated_mask)
-                        logger.log_metrics({"model/n_mask_diff_wrt_initial_warmup_mask": int(n_diff)})
+                        logger.log_metrics({"model/n_mask_diff_wrt_after_initial_warmup_mask": int(n_diff)})
                     self.current_mask = updated_mask
             # log the remaining parameter's magnitude statistics during training
             if (self.log_interval is not None and
@@ -510,7 +538,7 @@ class GBReg(Algorithm):
                     magnitude_stat = self.magnitude_stat(state.model, self.final_fixed_mask)
                 logger.log_metrics({"model/remaining_candidate_magnitude_mean": magnitude_stat["avg"],
                                     "model/remaining_candidate_magnitude_std":  magnitude_stat["std"]})
-            # log the parameter's gradient norm
+            # log the remaining parameter's gradient norm during training
             if (self.log_interval is not None and
                 logger is not None and
                 train_step_index % self.log_interval == 0
@@ -518,7 +546,7 @@ class GBReg(Algorithm):
                 if train_step_index <= self.pruning_start:
                     remaining_candidate_grad_norm, remaining_non_candidate_grad_norm, remaining_total_grad_norm = self.get_grad_norms(state.model)
                 elif train_step_index > self.pruning_start and mask is not None:
-                    remaining_candidate_grad_norm, remaining_non_candidate_grad_norm, remaining_total_grad_norm= self.get_grad_norms(state.model, mask)
+                    remaining_candidate_grad_norm, remaining_non_candidate_grad_norm, remaining_total_grad_norm = self.get_grad_norms(state.model, mask)
                 logger.log_metrics({"gradients/remaining_candidate_grad_norm": float(remaining_candidate_grad_norm)})
                 logger.log_metrics({"gradients/remaining_non_candidate_grad_norm": float(remaining_non_candidate_grad_norm)})
                 logger.log_metrics({"gradients/remaining_total_grad_norm": float(remaining_total_grad_norm)})

@@ -20,13 +20,14 @@ composer -m -n 1 GLUE.train \
   --alpha_f_sigma1 1.0 \
   --alpha_f_sigma0 1.0 \
   --initial_warmup_steps 1ep \
-  --final_warmup_steps 2ep \
+  --final_warmup_steps 0ep \
+  --sparse_finetune_steps 2ep \
   --pruning_interval 10 \
   --seed ${seed} \
-  --initial_sparsity 0.3 \
+  --initial_sparsity 0.4 \
   --final_sparsity ${sparsity} \
-  --run_name mnli_${sparsity}_${seed}_run7 \
-  --save_folder ./checkpoints/GLUE/mnli/${sparsity}/${seed}_run7 \
+  --run_name mnli_${sparsity}_${seed}_run10 \
+  --save_folder ./checkpoints/GLUE/mnli/${sparsity}/${seed}_run10 \
   --save_interval 0.05dur \
   --eval_interval 0.05dur \
   --log_interval 500 \
