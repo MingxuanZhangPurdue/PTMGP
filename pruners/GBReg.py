@@ -112,6 +112,7 @@ class GBReg(Algorithm):
             final_warmup_steps=0,
             pruning_interval=10,
             pruning_params=None,
+            clipping_start = None,
             clipping_threshold=None,
             sparse_finetune_steps=0,
             log_interval=None,
@@ -146,7 +147,13 @@ class GBReg(Algorithm):
         self.train_size = train_size
         self.max_train_steps = max_train_steps
 
+        self.clipping_start = clipping_start if clipping_start is not None else pruning_end + 1
         self.clipping_threshold = clipping_threshold
+        assert self.clipping_start > self.pruning_start, (
+            f"clipping_start: {self.clipping_start}, "
+            f"pruning_start: {self.pruning_start}. "
+            "gradient clipping will start before a pruning mask is generated!"
+        )
 
         self.pruning_params = re.compile("|".join(pruning_params), re.IGNORECASE) if pruning_params is not None else None
 
@@ -219,6 +226,7 @@ class GBReg(Algorithm):
         anneal_end_sigma1 = _convert_timestr_to_int(args.anneal_end_sigma1, max_train_steps, train_dataloader_len) if args.anneal_end_sigma1 is not None else None
         anneal_start_lambda_mix = _convert_timestr_to_int(args.anneal_start_lambda_mix, max_train_steps, train_dataloader_len) if args.anneal_start_lambda_mix is not None else None
         anneal_end_lambda_mix = _convert_timestr_to_int(args.anneal_end_lambda_mix, max_train_steps, train_dataloader_len) if args.anneal_end_lambda_mix is not None else None
+        clipping_start = _convert_timestr_to_int(args.clipping_start, max_train_steps, train_dataloader_len) if args.clipping_start is not None else None
         return self(
             train_size=train_size,
             max_train_steps=max_train_steps,
@@ -246,6 +254,7 @@ class GBReg(Algorithm):
             final_warmup_steps=final_warmup_steps,
             pruning_interval=pruning_interval,
             pruning_params=args.pruning_params,
+            clipping_start=clipping_start,
             clipping_threshold=args.clipping_threshold,
             sparse_finetune_steps=sparse_finetune_steps,
             log_interval=log_interval
@@ -378,7 +387,7 @@ class GBReg(Algorithm):
             raise ValueError(f"Invalid train_step_index value: {train_step_index}")
         return sparsity, pruning_ind
     
-    def gradient_clipping(self, model, mask):
+    def masked_gradient_clipping(self, model, mask):
         grads = []
         for n, p in model.named_parameters():
             if self.whether_prune_param(n):
@@ -405,20 +414,6 @@ class GBReg(Algorithm):
             if self.whether_prune_param(n):
                 p.detach().masked_fill_(mask[n], 0.0)
     
-    def magnitude_stat(self, model, mask=None):
-        magnitude_vector = []
-        for n, p in model.named_parameters():
-            if self.whether_prune_param(n):
-                if mask is not None:
-                    magnitude_vector.append(p.detach().abs()[~mask[n]].view(-1))
-                else:
-                    magnitude_vector.append(p.detach().abs().view(-1))
-        magnitude_vector = torch.cat(magnitude_vector)
-        magnitude_stat = {}
-        magnitude_stat["avg"] = float(magnitude_vector.mean())
-        magnitude_stat["std"] = float(magnitude_vector.std())
-        return magnitude_stat
-    
     def count_param_below_prior_threshold(self, model, prior_threshold):
         n_param_below_prior_threshold = 0
         for n, p in model.named_parameters():
@@ -426,7 +421,27 @@ class GBReg(Algorithm):
                 n_param_below_prior_threshold += (p.detach().abs() < prior_threshold).sum().item()
         return n_param_below_prior_threshold
     
-    def get_grad_norms(self, model, mask=None):
+    def get_remaining_magnitude_stat(self, model, mask=None):
+        remaining_candidate_magnitude_vector = []
+        remaining_non_candidate_magnitude_vector = []
+        for n, p in model.named_parameters():
+            if self.whether_prune_param(n):
+                if mask is not None:
+                    remaining_candidate_magnitude_vector.append(p.detach().abs()[~mask[n]].view(-1))
+                else:
+                    remaining_candidate_magnitude_vector.append(p.detach().abs().view(-1))
+            else:
+                remaining_non_candidate_magnitude_vector.append(p.detach().abs().view(-1))
+        remaining_candidate_magnitude_vector = torch.cat(remaining_candidate_magnitude_vector)
+        remaining_non_candidate_magnitude_vector = torch.cat(remaining_non_candidate_magnitude_vector)
+        remaining_magnitude_stat = {}
+        remaining_magnitude_stat["model/remaining_candidate_magnitude_avg"] = remaining_candidate_magnitude_vector.mean().item()
+        remaining_magnitude_stat["model/remaining_candidate_magnitude_std"] = remaining_candidate_magnitude_vector.std().item()
+        remaining_magnitude_stat["model/remaining_non_candidate_magnitude_avg"] = remaining_non_candidate_magnitude_vector.mean().item()
+        remaining_magnitude_stat["model/remaining_non_candidate_magnitude_std"] = remaining_non_candidate_magnitude_vector.std().item()
+        return remaining_magnitude_stat
+    
+    def get_remaining_grad_norms(self, model, mask=None):
         remaining_candidate_grads = []
         remaining_non_candidate_grads = []
         for n, p in model.named_parameters():
@@ -440,7 +455,11 @@ class GBReg(Algorithm):
         remaining_candidate_grad_norm = torch.cat(remaining_candidate_grads).norm(2).item()
         remaining_non_candidate_grad_norm = torch.cat(remaining_non_candidate_grads).norm(2).item()
         remaining_total_grad_norm = (remaining_candidate_grad_norm**2 + remaining_non_candidate_grad_norm**2)**0.5
-        return remaining_candidate_grad_norm, remaining_non_candidate_grad_norm, remaining_total_grad_norm
+        remaining_grad_norms = {}
+        remaining_grad_norms["gradient/remaining_candidate_grad_norm"] = remaining_candidate_grad_norm
+        remaining_grad_norms["gradient/remaining_non_candidate_grad_norm"] = remaining_non_candidate_grad_norm
+        remaining_grad_norms["gradient/remaining_total_grad_norm"] = remaining_total_grad_norm
+        return remaining_grad_norms
     
     def print_pruning_modules(self, model):
         print ("List of model parameters to be pruned:")
@@ -462,9 +481,8 @@ class GBReg(Algorithm):
             if (self.log_interval is not None and 
                 logger is not None and
                 train_step_index == 0):
-                magnitude_stat = self.magnitude_stat(state.model)
-                logger.log_metrics({"model/remaining_candidate_magnitude_mean": magnitude_stat["avg"],
-                                    "model/remaining_candidate_magnitude_std":  magnitude_stat["std"]})
+                remaining_magnitude_stat = self.get_remaining_magnitude_stat(state.model)
+                logger.log_metrics(remaining_magnitude_stat)
             # in case we resume training from a checkpoint after the gradual pruning stage, we need to generate the final fixed mask first
             if (train_step_index > self.pruning_end and 
                 self.final_fixed_mask is None):
@@ -483,10 +501,10 @@ class GBReg(Algorithm):
                     logger.log_metrics({"prior/prior_threshold": float(prior_threshold)})
                 self.current_prior_threshold = prior_threshold
             # perform gradient clipping
-            if (train_step_index > self.pruning_start and
-                self.clipping_threshold is not None and
+            if (self.clipping_threshold is not None and
+                train_step_index >= self.clipping_start and
                 self.current_sparsity_mask is not None):
-                self.gradient_clipping(state.model, self.current_sparsity_mask)
+                self.masked_gradient_clipping(state.model, self.current_sparsity_mask)
         elif event == Event.BATCH_END:
             train_step_index = state.timestamp.batch.value - 1
             # log the count of parameters remaining in the high-penalty region (spike) from the last pruning step right before the next pruning step
@@ -496,17 +514,17 @@ class GBReg(Algorithm):
                 train_step_index <= self.pruning_end and
                 train_step_index % self.pruning_interval == 0):
                 n_param_below_prior_threshold = self.count_param_below_prior_threshold(state.model, self.current_prior_threshold)
-                logger.log_metrics({"model/percent_remained_in_spike": float(n_param_below_prior_threshold/self.n_total_param_for_pruning)})
+                logger.log_metrics({"pruning/percent_remained_in_spike": float(n_param_below_prior_threshold/self.n_total_param_for_pruning)})
             # perform magnitude pruning
             sparsity, mask_threshold, mask = self.magnitude_pruning(state.model, train_step_index)
             if mask is not None:
                 self.current_sparsity_mask = mask
             # log the current sparsity
             if logger is not None:
-                logger.log_metrics({"model/sparsity": float(sparsity)})
+                logger.log_metrics({"pruning/sparsity": float(sparsity)})
                 # if the current mask threshold is not None, log the current mask threshold
                 if mask_threshold is not None:
-                    logger.log_metrics({"model/mask_threshold": float(mask_threshold)})
+                    logger.log_metrics({"pruning/mask_threshold": float(mask_threshold)})
             # log how mask corresponds to the final sparsity changes during the gradual pruning stage
             if (self.log_interval is not None and
                 logger is not None and
@@ -520,10 +538,10 @@ class GBReg(Algorithm):
                     updated_mask = self.create_pruning_mask(state.model, mask_threshold, is_dict)
                     if self.current_mask is not None:
                         n_diff = _count_mask_differences(self.current_mask, updated_mask)
-                        logger.log_metrics({"model/n_mask_diff_wrt_current_mask": int(n_diff)})
+                        logger.log_metrics({"pruning/n_mask_diff_wrt_current_mask": int(n_diff)})
                     if self.after_initial_warmup_mask is not None:
                         n_diff = _count_mask_differences(self.after_initial_warmup_mask, updated_mask)
-                        logger.log_metrics({"model/n_mask_diff_wrt_after_initial_warmup_mask": int(n_diff)})
+                        logger.log_metrics({"pruning/n_mask_diff_wrt_after_initial_warmup_mask": int(n_diff)})
                     self.current_mask = updated_mask
             # log the remaining parameter's magnitude statistics during training
             if (self.log_interval is not None and
@@ -531,22 +549,19 @@ class GBReg(Algorithm):
                 train_step_index % self.log_interval == 0
                 ):
                 if train_step_index < self.pruning_start:
-                    magnitude_stat = self.magnitude_stat(state.model)
+                    remaining_magnitude_stat = self.get_remaining_magnitude_stat(state.model)
                 elif self.pruning_start <= train_step_index <= self.pruning_end and mask is not None:
-                    magnitude_stat = self.magnitude_stat(state.model, mask)
+                    remaining_magnitude_stat = self.get_remaining_magnitude_stat(state.model, mask)
                 elif train_step_index > self.pruning_end and self.final_fixed_mask is not None:
-                    magnitude_stat = self.magnitude_stat(state.model, self.final_fixed_mask)
-                logger.log_metrics({"model/remaining_candidate_magnitude_mean": magnitude_stat["avg"],
-                                    "model/remaining_candidate_magnitude_std":  magnitude_stat["std"]})
+                    remaining_magnitude_stat = self.get_remaining_magnitude_stat(state.model, self.final_fixed_mask)
+                logger.log_metrics(remaining_magnitude_stat)
             # log the remaining parameter's gradient norm during training
             if (self.log_interval is not None and
                 logger is not None and
                 train_step_index % self.log_interval == 0
                 ):
                 if train_step_index <= self.pruning_start:
-                    remaining_candidate_grad_norm, remaining_non_candidate_grad_norm, remaining_total_grad_norm = self.get_grad_norms(state.model)
+                    remaining_grad_norms = self.get_remaining_grad_norms(state.model)
                 elif train_step_index > self.pruning_start and mask is not None:
-                    remaining_candidate_grad_norm, remaining_non_candidate_grad_norm, remaining_total_grad_norm = self.get_grad_norms(state.model, mask)
-                logger.log_metrics({"gradients/remaining_candidate_grad_norm": float(remaining_candidate_grad_norm)})
-                logger.log_metrics({"gradients/remaining_non_candidate_grad_norm": float(remaining_non_candidate_grad_norm)})
-                logger.log_metrics({"gradients/remaining_total_grad_norm": float(remaining_total_grad_norm)})
+                    remaining_grad_norms = self.get_remaining_grad_norms(state.model, mask)
+                logger.log_metrics(remaining_grad_norms)
