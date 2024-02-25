@@ -26,7 +26,7 @@ from composer.callbacks import LRMonitor, RuntimeEstimator
 from composer.loggers import WandBLogger
 from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler
 
-from pruners.GBReg import GBReg
+from pruners.MWA import MWA
 from pruners.flexible_composer_lr_scheduler import LinearWithRewindsScheduler
 
 task_to_keys = {
@@ -391,7 +391,7 @@ def parse_args():
         help="The number of training steps between two pruning operations."
     )
 
-    # GBReg
+    # MWA
     parser.add_argument(
         "--sigma0",             
         type=float,            
@@ -399,71 +399,10 @@ def parse_args():
         help="The base value of the sigma0."
     )
     parser.add_argument(
-        "--alpha_i_sigma0",     
-        type=float,            
-        default=1.0,   
-        help="The initial factor value of the sigma0."
-    )
-    parser.add_argument(
-        "--alpha_f_sigma0",     
-        type=float,            
-        default=1.0,   
-        help="The final factor value of the sigma0."
-    )
-    parser.add_argument(
-        "--anneal_power_sigma0",
-        type=float,
-        default=1.0,
-        help="The power value to anneal the sigma0."
-    )
-    parser.add_argument(
-        "--anneal_start_sigma0",
-        type=str_int_and_none,
-        default=None,
-        help="The start step to anneal the sigma0."
-    )
-    parser.add_argument(
-        "--anneal_end_sigma0",
-        type=str_int_and_none,
-        default=None,
-        help="The end step to anneal the sigma0."
-    )
-
-    parser.add_argument(
         "--sigma1",             
         type=float,            
         default=0.1,   
         help="The base value of the sigma1."
-    )
-    parser.add_argument(
-        "--alpha_i_sigma1",
-        type=float,
-        default=1.0,
-        help="The initial factor value of the sigma1."
-    )
-    parser.add_argument(
-        "--alpha_f_sigma1",     
-        type=float,            
-        default=1.0,   
-        help="The final factor value of the sigma1."
-    )
-    parser.add_argument(
-        "--anneal_power_sigma1",
-        type=float,
-        default=1.0,
-        help="The power value to anneal the sigma1."
-    )
-    parser.add_argument(
-        "--anneal_start_sigma1",
-        type=str_int_and_none,
-        default=None,
-        help="The start step to anneal the sigma1."
-    )
-    parser.add_argument(
-        "--anneal_end_sigma1",
-        type=str_int_and_none,
-        default=None,
-        help="The end step to anneal the sigma1."
     )
     
     parser.add_argument(
@@ -706,7 +645,7 @@ def main():
     else:
         raise ValueError(f"Unsupported time unit: {train_time.unit}")
     
-    pruner_algorithm = GBReg.from_args(train_size, max_train_steps, len(train_dataloader), args)
+    pruner_algorithm = MWA.from_args(train_size, max_train_steps, len(train_dataloader), args)
 
     # initialize the trainer
     trainer = Trainer(
