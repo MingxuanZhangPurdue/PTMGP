@@ -145,7 +145,7 @@ class MWA(Algorithm):
             alpha = self.alpha_i_lambda_mix
         elif self.anneal_start_lambda_mix < train_step_index < self.anneal_end_lambda_mix:
             frac_of_total = 1 - (train_step_index - self.anneal_start_lambda_mix) / (self.anneal_end_lambda_mix - self.anneal_start_lambda_mix)
-            alpha = self.alpha_i_lambda_mix + (self.alpha_f_lambda_mix - self.alpha_i_lambda_mix) * (frac_of_total ** self.anneal_power_lambda_mix)
+            alpha = self.alpha_f_lambda_mix + (self.alpha_i_lambda_mix - self.alpha_f_lambda_mix) * (frac_of_total ** self.anneal_power_lambda_mix)
         elif train_step_index >= self.anneal_end_lambda_mix:
             alpha = self.alpha_f_lambda_mix
         else:
