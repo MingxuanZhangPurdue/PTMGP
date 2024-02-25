@@ -95,8 +95,8 @@ class MWA(Algorithm):
         self.alpha_i_lambda_mix = alpha_i_lambda_mix
         self.alpha_f_lambda_mix = alpha_f_lambda_mix
         self.anneal_power_lambda_mix = anneal_power_lambda_mix
-        self.anneal_start_lambda_mix = anneal_start_lambda_mix
-        self.anneal_end_lambda_mix = anneal_end_lambda_mix
+        self.anneal_start_lambda_mix = anneal_start_lambda_mix if anneal_start_lambda_mix is not None else pruning_start
+        self.anneal_end_lambda_mix = anneal_end_lambda_mix if anneal_end_lambda_mix is not None else pruning_end
 
     # initialize the algorithm from the command line arguments
     @classmethod
