@@ -420,9 +420,9 @@ class MWA(Algorithm):
                     remaining_candidate_grad_norm = self.get_grad_norm(state.model, which="remaining_candidate", mask=mask)
                     remaining_non_candidate_grad_norm = self.get_grad_norm(state.model, which="remaining_non_candidate")
                     total_remaining_grad_norm = (remaining_candidate_grad_norm**2 + remaining_non_candidate_grad_norm**2)**0.5
-                    logger.log_metrics({"grad/remaining_candidate_grad_norm": float(remaining_candidate_grad_norm)})
-                    logger.log_metrics({"grad/remaining_non_candidate_grad_norm": float(remaining_non_candidate_grad_norm)})
-                    logger.log_metrics({"grad/total_remaining_grad_norm": float(total_remaining_grad_norm)})
+                    logger.log_metrics({"gradient/remaining_candidate_grad_norm": float(remaining_candidate_grad_norm)})
+                    logger.log_metrics({"gradient/remaining_non_candidate_grad_norm": float(remaining_non_candidate_grad_norm)})
+                    logger.log_metrics({"gradient/total_remaining_grad_norm": float(total_remaining_grad_norm)})
                     if mask is not None:
                         pruned_candidate_grad_norm = self.get_grad_norm(state.model, which="pruned_candidate", mask=mask)
-                        logger.log_metrics({"grad/pruned_candidate_grad_norm": float(pruned_candidate_grad_norm)})
+                        logger.log_metrics({"gradient/pruned_candidate_grad_norm": float(pruned_candidate_grad_norm)})
