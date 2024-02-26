@@ -21,7 +21,7 @@ class MWA(Algorithm):
             max_train_steps,
             sigma0=1e-10,
             sigma1=0.05,
-            lambda_mix=1e-3,
+            lambda_mix=1e-1,
             alpha_i_lambda_mix=1.0,
             alpha_f_lambda_mix=1.0,
             anneal_power_lambda_mix=1.0,
@@ -71,7 +71,6 @@ class MWA(Algorithm):
         self.current_sparsity_mask = None
 
         self.train_size = train_size
-        self.max_train_steps = max_train_steps
 
         self.clipping_start = clipping_start if clipping_start is not None else pruning_end + 1
         self.clipping_threshold = clipping_threshold
@@ -96,7 +95,7 @@ class MWA(Algorithm):
         self.alpha_f_lambda_mix = alpha_f_lambda_mix
         self.anneal_power_lambda_mix = anneal_power_lambda_mix
         self.anneal_start_lambda_mix = anneal_start_lambda_mix if anneal_start_lambda_mix is not None else pruning_start
-        self.anneal_end_lambda_mix = anneal_end_lambda_mix if anneal_end_lambda_mix is not None else pruning_end
+        self.anneal_end_lambda_mix = anneal_end_lambda_mix if anneal_end_lambda_mix is not None else final_warmup_start
 
     # initialize the algorithm from the command line arguments
     @classmethod
@@ -172,7 +171,6 @@ class MWA(Algorithm):
         return prior_threshold, sigma0, sigma1, lambda_mix
     
     def calculate_mask_threshold(self, model, sparsity):
-        # is stands for importance score, in this case, the absolute value of the parameter
         is_dict = {}
         for n, p in model.named_parameters():
             if self.whether_prune_param(n):
