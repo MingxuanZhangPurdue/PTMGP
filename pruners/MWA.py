@@ -365,7 +365,7 @@ class MWA(Algorithm):
                 logger is not None and
                 train_step_index > self.pruning_start and
                 train_step_index <= self.pruning_end and
-                train_step_index % self.pruning_interval == 0):
+                train_step_index % self.log_interval == 0):
                 n_param_below_prior_threshold, in_spike_mask = self.count_param_below_prior_threshold(state.model, self.current_prior_threshold)
                 logger.log_metrics({"pruning/percent_remained_in_spike": float(n_param_below_prior_threshold/self.n_total_param_for_pruning)})
                 if self.current_sparsity_mask is not None:
