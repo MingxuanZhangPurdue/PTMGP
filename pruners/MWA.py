@@ -263,58 +263,54 @@ class MWA(Algorithm):
                 n_param_below_prior_threshold += in_spike_mask[n].sum().item()
         return n_param_below_prior_threshold, in_spike_mask
     
-    def get_magnitude_stat(self, model, mask=None):
-        pruned_candidate_magnitude_vector = []
-        remaining_candidate_magnitude_vector = []
-        remaining_non_candidate_magnitude_vector = []
+    def get_magnitude_stat(self, model, which, mask=None):
+        magnitude_vector = []
         for n, p in model.named_parameters():
-            if self.whether_prune_param(n):
-                if mask is not None:
-                    remaining_candidate_magnitude_vector.append(p.detach().abs()[~mask[n]].view(-1))
-                    pruned_candidate_magnitude_vector.append(p.detach().abs()[mask[n]].view(-1))
-                else:
-                    remaining_candidate_magnitude_vector.append(p.detach().abs().view(-1))
+            if which == "remaining_candidate":
+                if self.whether_prune_param(n):
+                    if mask is not None:
+                        magnitude_vector.append(p.detach().abs()[~mask[n]].view(-1))
+                    else:
+                        magnitude_vector.append(p.detach().abs().view(-1))
+            elif which == "remaining_non_candidate":
+                if not self.whether_prune_param(n):
+                    magnitude_vector.append(p.detach().abs().view(-1))
+            elif which == "pruned_candidate":
+                if self.whether_prune_param(n):
+                    if mask is not None:
+                        magnitude_vector.append(p.detach().abs()[mask[n]].view(-1))
+                    else:
+                        raise ValueError("mask must be provided for the pruned_candidate magnitude vector")
             else:
-                remaining_non_candidate_magnitude_vector.append(p.detach().abs().view(-1))
-        remaining_candidate_magnitude_vector = torch.cat(remaining_candidate_magnitude_vector)
-        remaining_non_candidate_magnitude_vector = torch.cat(remaining_non_candidate_magnitude_vector)
-        if len(pruned_candidate_magnitude_vector) > 0:
-            pruned_candidate_magnitude_vector = torch.cat(pruned_candidate_magnitude_vector)
+                raise ValueError("which must be one of the following: remaining_candidate, remaining_non_candidate, pruned_candidate")
+        magnitude_vector = torch.cat(magnitude_vector)
         magnitude_stat = {}
-        magnitude_stat["model/remaining_candidate_magnitude_avg"] = remaining_candidate_magnitude_vector.mean().item()
-        magnitude_stat["model/remaining_candidate_magnitude_std"] = remaining_candidate_magnitude_vector.std().item()
-        magnitude_stat["model/remaining_non_candidate_magnitude_avg"] = remaining_non_candidate_magnitude_vector.mean().item()
-        magnitude_stat["model/remaining_non_candidate_magnitude_std"] = remaining_non_candidate_magnitude_vector.std().item()
-        if len(pruned_candidate_magnitude_vector) > 0:
-            magnitude_stat["model/pruned_candidate_magnitude_avg"] = pruned_candidate_magnitude_vector.mean().item()
-            magnitude_stat["model/pruned_candidate_magnitude_std"] = pruned_candidate_magnitude_vector.std().item() 
+        magnitude_stat["model/magnitude_avg"] = magnitude_vector.mean().item()
+        magnitude_stat["model/magnitude_std"] = magnitude_vector.std().item()
         return magnitude_stat
     
-    def get_grad_norms(self, model, mask=None):
-        pruned_candidate_grads = []
-        remaining_candidate_grads = []
-        remaining_non_candidate_grads = []
+    def get_grad_norm(self, model, which, mask=None):
+        grads = []
         for n, p in model.named_parameters():
-            if self.whether_prune_param(n):
-                if mask is not None:
-                    remaining_candidate_grads.append(p.grad.detach()[~mask[n]].view(-1))
-                    pruned_candidate_grads.append(p.grad.detach()[mask[n]].view(-1))
-                else:
-                    remaining_candidate_grads.append(p.grad.detach().view(-1))
+            if which == "remaining_candidate":
+                if self.whether_prune_param(n):
+                    if mask is not None:
+                        grads.append(p.grad.detach()[~mask[n]].view(-1))
+                    else:
+                        grads.append(p.grad.detach().view(-1))
+            elif which == "remaining_non_candidate":
+                if not self.whether_prune_param(n):
+                    grads.append(p.grad.detach().view(-1))
+            elif which == "pruned_candidate":
+                if self.whether_prune_param(n):
+                    if mask is not None:
+                        grads.append(p.grad.detach()[mask[n]].view(-1))
+                    else:
+                        raise ValueError("mask must be provided for the pruned_candidate gradient vector")
             else:
-                remaining_non_candidate_grads.append(p.grad.detach().view(-1))
-        if len(pruned_candidate_grads) > 0:
-            pruned_candidate_grad_norm = torch.cat(pruned_candidate_grads).norm(2).item()
-        remaining_candidate_grad_norm = torch.cat(remaining_candidate_grads).norm(2).item()
-        remaining_non_candidate_grad_norm = torch.cat(remaining_non_candidate_grads).norm(2).item()
-        remaining_total_grad_norm = (remaining_candidate_grad_norm**2 + remaining_non_candidate_grad_norm**2)**0.5
-        grad_norms = {}
-        grad_norms["gradient/remaining_candidate_grad_norm"] = remaining_candidate_grad_norm
-        grad_norms["gradient/remaining_non_candidate_grad_norm"] = remaining_non_candidate_grad_norm
-        grad_norms["gradient/remaining_total_grad_norm"] = remaining_total_grad_norm
-        if len(pruned_candidate_grads) > 0:
-            grad_norms["gradient/pruned_candidate_grad_norm"] = pruned_candidate_grad_norm
-        return grad_norms
+                raise ValueError("which must be one of the following: remaining_candidate, remaining_non_candidate, pruned_candidate")
+        grad_norm = torch.cat(grads).norm(2).item()
+        return grad_norm
     
     def print_pruning_modules(self, model):
         print ("List of model modules to be pruned:")
@@ -336,8 +332,12 @@ class MWA(Algorithm):
             if (self.log_interval is not None and
                 logger is not None and
                 train_step_index == 0):
-                magnitude_stat = self.get_magnitude_stat(state.model)
-                logger.log_metrics(magnitude_stat)
+                remaining_candidate_magnitude_stat = self.get_magnitude_stat(state.model, which="remaining_candidate")
+                remaining_non_candidate_magnitude_stat = self.get_magnitude_stat(state.model, which="remaining_non_candidate")
+                logger.log_metrics({"model/remaining_candidate_magnitude_avg": float(remaining_candidate_magnitude_stat["model/magnitude_avg"]),
+                                    "model/remaining_candidate_magnitude_std": float(remaining_candidate_magnitude_stat["model/magnitude_std"]),
+                                    "model/remaining_non_candidate_magnitude_avg": float(remaining_non_candidate_magnitude_stat["model/magnitude_avg"]),
+                                    "model/remaining_non_candidate_magnitude_std": float(remaining_non_candidate_magnitude_stat["model/magnitude_std"])})
             # in case we resume training from a checkpoint after the gradual pruning stage, we need to generate the final fixed mask first
             if (train_step_index > self.pruning_end and 
                 self.final_fixed_mask is None):
@@ -403,23 +403,28 @@ class MWA(Algorithm):
                     self.current_mask = updated_mask
             # log the parameter's magnitude statistics during training
             if (self.log_interval is not None and
-                logger is not None and
-                train_step_index % self.log_interval == 0
-                ):
-                if train_step_index < self.pruning_start:
-                    magnitude_stat = self.get_magnitude_stat(state.model)
-                elif self.pruning_start <= train_step_index <= self.pruning_end and mask is not None:
-                    magnitude_stat = self.get_magnitude_stat(state.model, mask)
-                elif train_step_index > self.pruning_end and self.final_fixed_mask is not None:
-                    magnitude_stat = self.get_magnitude_stat(state.model, self.final_fixed_mask)
-                logger.log_metrics(magnitude_stat)
+                logger is not None):
+                if train_step_index % self.log_interval == 0:
+                    remaining_candidate_magnitude_stat = self.get_magnitude_stat(state.model, which="remaining_candidate", mask=mask)
+                    remaining_non_candidate_magnitude_stat = self.get_magnitude_stat(state.model, which="remaining_non_candidate")
+                    logger.log_metrics({"model/remaining_candidate_magnitude_avg": float(remaining_candidate_magnitude_stat["model/magnitude_avg"]),
+                                        "model/remaining_candidate_magnitude_std": float(remaining_candidate_magnitude_stat["model/magnitude_std"]),
+                                        "model/remaining_non_candidate_magnitude_avg": float(remaining_non_candidate_magnitude_stat["model/magnitude_avg"]),
+                                        "model/remaining_non_candidate_magnitude_std": float(remaining_non_candidate_magnitude_stat["model/magnitude_std"])})
+                elif (train_step_index + 1) % self.log_interval == 0 and self.current_sparsity_mask is not None:
+                    pruned_candidate_magnitude_stat = self.get_magnitude_stat(state.model, which="pruned_candidate", mask=self.current_sparsity_mask)
+                    logger.log_metrics({"model/pruned_candidate_magnitude_avg": float(pruned_candidate_magnitude_stat["model/magnitude_avg"]),
+                                        "model/pruned_candidate_magnitude_std": float(pruned_candidate_magnitude_stat["model/magnitude_std"])})
             # log the parameter's gradient norm during training
             if (self.log_interval is not None and
-                logger is not None and
-                train_step_index % self.log_interval == 0
-                ):
-                if train_step_index <= self.pruning_start:
-                    grad_norms = self.get_grad_norms(state.model)
-                elif train_step_index > self.pruning_start and mask is not None:
-                    grad_norms = self.get_grad_norms(state.model, mask)
-                logger.log_metrics(grad_norms)
+                logger is not None):
+                if train_step_index % self.log_interval == 0:
+                    remaining_candidate_grad_norm = self.get_grad_norm(state.model, which="remaining_candidate", mask=mask)
+                    remaining_non_candidate_grad_norm = self.get_grad_norm(state.model, which="remaining_non_candidate")
+                    total_remaining_grad_norm = (remaining_candidate_grad_norm**2 + remaining_non_candidate_grad_norm**2)**0.5
+                    logger.log_metrics({"grad/remaining_candidate_grad_norm": float(remaining_candidate_grad_norm)})
+                    logger.log_metrics({"grad/remaining_non_candidate_grad_norm": float(remaining_non_candidate_grad_norm)})
+                    logger.log_metrics({"grad/total_remaining_grad_norm": float(total_remaining_grad_norm)})
+                    if mask is not None:
+                        pruned_candidate_grad_norm = self.get_grad_norm(state.model, which="pruned_candidate", mask=mask)
+                        logger.log_metrics({"grad/pruned_candidate_grad_norm": float(pruned_candidate_grad_norm)})
