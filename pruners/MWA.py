@@ -368,9 +368,6 @@ class MWA(Algorithm):
                 train_step_index % self.log_interval == 0):
                 n_param_below_prior_threshold, in_spike_mask = self.count_param_below_prior_threshold(state.model, self.current_prior_threshold)
                 logger.log_metrics({"pruning/percent_remained_in_spike": float(n_param_below_prior_threshold/self.n_total_param_for_pruning)})
-                if self.current_sparsity_mask is not None:
-                    n_diff = _count_mask_differences(self.current_sparsity_mask, in_spike_mask)
-                    logger.log_metrics({"pruning/n_diff_between_mask_and_spike": int(n_diff)})
             # perform magnitude pruning
             sparsity, mask_threshold, mask = self.magnitude_pruning(state.model, train_step_index)
             if mask is not None:
