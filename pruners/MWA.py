@@ -24,16 +24,14 @@ class MWA(Algorithm):
             lambda_mix=1e-1,
             alpha_i_lambda_mix=1.0,
             alpha_f_lambda_mix=1.0,
-            anneal_power_lambda_mix=1.0,
             anneal_start_lambda_mix=None,
             anneal_end_lambda_mix=None,
             initial_sparsity=0.0,
             final_sparsity=0.0,
             initial_warmup_steps=0,
-            final_warmup_steps=0,
             pruning_interval=10,
             pruning_params=None,
-            clipping_start = None,
+            clipping_start=None,
             clipping_threshold=None,
             sparse_finetune_steps=0,
             log_interval=None,
@@ -47,19 +45,16 @@ class MWA(Algorithm):
         self.final_sparsity = final_sparsity
 
         pruning_start = initial_warmup_steps
-        final_warmup_start = max_train_steps - sparse_finetune_steps - final_warmup_steps
         pruning_end = max_train_steps - sparse_finetune_steps
 
-        assert pruning_start < final_warmup_start <= pruning_end <= max_train_steps, (
+        assert pruning_start < pruning_end <= max_train_steps, (
             f"pruning_start: {pruning_start}, "
-            f"final_warmup_start: {final_warmup_start}, "
             f"pruning_end: {pruning_end}, "
             f"max_train_steps: {max_train_steps}. "
-            "Condition pruning_start < final_warmup_start <= pruning_end <= max_train_steps must be satisfied, but got False"
+            "Condition pruning_start < pruning_end <= max_train_steps must be satisfied, but got False"
         )
 
         self.pruning_start = pruning_start
-        self.final_warmup_start = final_warmup_start
         self.pruning_end = pruning_end
         self.pruning_interval = pruning_interval
 
@@ -93,15 +88,13 @@ class MWA(Algorithm):
         self.lambda_mix = lambda_mix
         self.alpha_i_lambda_mix = alpha_i_lambda_mix
         self.alpha_f_lambda_mix = alpha_f_lambda_mix
-        self.anneal_power_lambda_mix = anneal_power_lambda_mix
         self.anneal_start_lambda_mix = anneal_start_lambda_mix if anneal_start_lambda_mix is not None else pruning_start
-        self.anneal_end_lambda_mix = anneal_end_lambda_mix if anneal_end_lambda_mix is not None else final_warmup_start
+        self.anneal_end_lambda_mix = anneal_end_lambda_mix if anneal_end_lambda_mix is not None else pruning_end
 
     # initialize the algorithm from the command line arguments
     @classmethod
     def from_args(self, train_size, max_train_steps, train_dataloader_len, args):
         initial_warmup_steps = _convert_timestr_to_int(args.initial_warmup_steps, max_train_steps, train_dataloader_len)
-        final_warmup_steps = _convert_timestr_to_int(args.final_warmup_steps, max_train_steps, train_dataloader_len)
         sparse_finetune_steps = _convert_timestr_to_int(args.sparse_finetune_steps, max_train_steps, train_dataloader_len)
         pruning_interval = _convert_timestr_to_int(args.pruning_interval, max_train_steps, train_dataloader_len)
         log_interval = _convert_timestr_to_int(args.log_interval, max_train_steps, train_dataloader_len) if args.log_interval is not None else None
@@ -116,13 +109,11 @@ class MWA(Algorithm):
             lambda_mix=args.lambda_mix,
             alpha_i_lambda_mix=args.alpha_i_lambda_mix,
             alpha_f_lambda_mix=args.alpha_f_lambda_mix,
-            anneal_power_lambda_mix=args.anneal_power_lambda_mix,
             anneal_start_lambda_mix=anneal_start_lambda_mix,
             anneal_end_lambda_mix=anneal_end_lambda_mix,
             initial_sparsity=args.initial_sparsity,
             final_sparsity=args.final_sparsity,
             initial_warmup_steps=initial_warmup_steps,
-            final_warmup_steps=final_warmup_steps,
             pruning_interval=pruning_interval,
             pruning_params=args.pruning_params,
             clipping_start=clipping_start,
@@ -144,7 +135,7 @@ class MWA(Algorithm):
             alpha = self.alpha_i_lambda_mix
         elif self.anneal_start_lambda_mix < train_step_index < self.anneal_end_lambda_mix:
             frac_of_total = 1 - (train_step_index - self.anneal_start_lambda_mix) / (self.anneal_end_lambda_mix - self.anneal_start_lambda_mix)
-            alpha = self.alpha_f_lambda_mix + (self.alpha_i_lambda_mix - self.alpha_f_lambda_mix) * (frac_of_total ** self.anneal_power_lambda_mix)
+            alpha = self.alpha_f_lambda_mix + (self.alpha_i_lambda_mix - self.alpha_f_lambda_mix) * frac_of_total
         elif train_step_index >= self.anneal_end_lambda_mix:
             alpha = self.alpha_f_lambda_mix
         else:
@@ -219,13 +210,10 @@ class MWA(Algorithm):
         elif train_step_index == self.pruning_start:
             sparsity = self.initial_sparsity
             pruning_ind = True
-        elif self.pruning_start < train_step_index < self.final_warmup_start:
-            frac_of_total = 1 - (train_step_index - self.pruning_start) / (self.final_warmup_start - self.pruning_start)
+        elif self.pruning_start < train_step_index < self.pruning_end:
+            frac_of_total = 1 - (train_step_index - self.pruning_start) / (self.pruning_end - self.pruning_start)
             sparsity = self.final_sparsity + (self.initial_sparsity - self.final_sparsity) * (frac_of_total ** 3)
             pruning_ind = True if train_step_index % self.pruning_interval == 0 else False
-        elif self.final_warmup_start <= train_step_index < self.pruning_end:
-            sparsity = self.final_sparsity
-            pruning_ind = True
         elif train_step_index >= self.pruning_end:
             sparsity = self.final_sparsity
             pruning_ind = True
