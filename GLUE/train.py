@@ -373,12 +373,6 @@ def parse_args():
           help="The number of training batches/steps for initial warmup."
     )
     parser.add_argument(
-        "--final_warmup_steps",       
-        type=str_int_and_none,   
-        default=0,     
-        help="The number of training batches/steps for final warmup."
-    )
-    parser.add_argument(
         "--sparse_finetune_steps",       
         type=str_int_and_none,   
         default=0,     
@@ -422,12 +416,6 @@ def parse_args():
         type=float,            
         default=1.0,   
         help="The final factor value of the lambda_mix."
-    )
-    parser.add_argument(
-        "--anneal_power_lambda_mix",
-        type=float,
-        default=1.0,
-        help="The power value to anneal the lambda_mix."
     )
     parser.add_argument(
         "--anneal_start_lambda_mix",
