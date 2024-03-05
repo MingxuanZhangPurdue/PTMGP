@@ -31,7 +31,6 @@ class MWA(Algorithm):
             initial_warmup_steps=0,
             pruning_interval=10,
             pruning_params=None,
-            clipping_start=None,
             clipping_threshold=None,
             sparse_finetune_steps=0,
             log_interval=None,
@@ -67,7 +66,6 @@ class MWA(Algorithm):
 
         self.train_size = train_size
 
-        self.clipping_start = clipping_start if clipping_start is not None else pruning_end + 1
         self.clipping_threshold = clipping_threshold
 
         self.pruning_params = re.compile("|".join(pruning_params), re.IGNORECASE) if pruning_params is not None else None
@@ -343,9 +341,9 @@ class MWA(Algorithm):
                 self.current_prior_threshold = prior_threshold
             # perform gradient clipping
             if (self.clipping_threshold is not None and
-                self.current_sparsity_mask is not None and
-                train_step_index >= self.clipping_start):
-                self.masked_gradient_clipping(state.model, self.current_sparsity_mask)
+                self.final_fixed_mask is not None and
+                train_step_index > self.pruning_end):
+                self.masked_gradient_clipping(state.model, self.final_fixed_mask)
         elif event == Event.BATCH_END:
             train_step_index = state.timestamp.batch.value - 1
             # log the count of parameters remaining in the high-penalty region (spike) from the last pruning step right before the next pruning step

@@ -199,12 +199,6 @@ def parse_args():
 
     # training setups
     parser.add_argument(
-        "--clipping_start",
-        type=str_int_and_none,
-        default=None,
-        help="The start step to clip the gradients."
-    )
-    parser.add_argument(
         "--clipping_threshold",
         type=float_and_none,
         default=1.0,
