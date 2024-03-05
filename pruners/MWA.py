@@ -98,7 +98,6 @@ class MWA(Algorithm):
         log_interval = _convert_timestr_to_int(args.log_interval, max_train_steps, train_dataloader_len) if args.log_interval is not None else None
         anneal_start_lambda_mix = _convert_timestr_to_int(args.anneal_start_lambda_mix, max_train_steps, train_dataloader_len) if args.anneal_start_lambda_mix is not None else None
         anneal_end_lambda_mix = _convert_timestr_to_int(args.anneal_end_lambda_mix, max_train_steps, train_dataloader_len) if args.anneal_end_lambda_mix is not None else None
-        clipping_start = _convert_timestr_to_int(args.clipping_start, max_train_steps, train_dataloader_len) if args.clipping_start is not None else None
         return self(
             train_size=train_size,
             max_train_steps=max_train_steps,
@@ -114,7 +113,6 @@ class MWA(Algorithm):
             initial_warmup_steps=initial_warmup_steps,
             pruning_interval=pruning_interval,
             pruning_params=args.pruning_params,
-            clipping_start=clipping_start,
             clipping_threshold=args.clipping_threshold,
             sparse_finetune_steps=sparse_finetune_steps,
             log_interval=log_interval
