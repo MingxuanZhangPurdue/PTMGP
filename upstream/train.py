@@ -10,6 +10,7 @@ from transformers import (
     DataCollatorForLanguageModeling,
 )
 
+
 from composer.utils.dist import get_sampler
 from composer.utils import reproducibility
 from composer import Time, TimeUnit
@@ -20,7 +21,7 @@ from composer.loggers import WandBLogger
 from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler
 from composer.metrics.nlp import LanguageCrossEntropy, MaskedAccuracy
 
-from pruners.BReg import BReg
+from pruners.MWA import MWA
 from upstream.utils_datasets import get_tokenized_mlm_datasets
 
 MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
