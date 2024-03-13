@@ -1,0 +1,46 @@
+#!/bin/bash
+
+module purge
+module load anaconda
+conda activate testenv
+
+seed=42
+sparsity=0.9
+
+composer -m -n 2 upstream.train \
+  --wandb_project_name upstream-bert-base \
+  --model_name_or_path neuralmagic/oBERT-12-upstream-pretrained-dense \
+  --dataset_name bookcorpus \
+  --dataset_name_2 wikimedia/wikipedia \
+  --dataset_config_name_2 20231101.en \
+  --max_seq_length 512 \
+  --preprocessing_num_workers 128 \
+  --precision amp_fp16 \
+  --max_duration 3ep \
+  --per_device_train_batch_size 32 \
+  --learning_rate 5e-5 \
+  --clipping_threshold 2.0 \
+  --clipping_start 1ep \
+  --lr_scheduler linear_with_rewinds \
+  --alpha_f_iw 0.2 \
+  --alpha_f_rewind 0.2 \
+  --t_iw 1ep \
+  --t_rewind 7ep \
+  --num_rewinds 1 \
+  --sigma0 1e-10 \
+  --sigma1 0.05 \
+  --lambda_mix 0.1 \
+  --alpha_i_lambda_mix 1.0 \
+  --alpha_f_lambda_mix 0.001 \
+  --initial_warmup_steps 1ep \
+  --final_warmup_steps 0ep \
+  --sparse_finetune_steps 1ep \
+  --pruning_interval 10 \
+  --seed ${seed} \
+  --initial_sparsity 0.3 \
+  --final_sparsity ${sparsity} \
+  --run_name mnli_${sparsity}_${seed}_run16 \
+  --save_folder ./checkpoints/GLUE/mnli/${sparsity}/${seed}_run16 \
+  --save_interval 0.05dur \
+  --eval_interval 0.05dur \
+  --log_interval 1000
