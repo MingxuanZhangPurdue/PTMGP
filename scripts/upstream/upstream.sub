@@ -17,30 +17,24 @@ composer -m -n 2 upstream.train \
   --preprocessing_num_workers 128 \
   --precision amp_fp16 \
   --max_duration 3ep \
-  --per_device_train_batch_size 32 \
-  --learning_rate 5e-5 \
-  --clipping_threshold 2.0 \
-  --clipping_start 1ep \
-  --lr_scheduler linear_with_rewinds \
-  --alpha_f_iw 0.2 \
-  --alpha_f_rewind 0.2 \
-  --t_iw 1ep \
-  --t_rewind 7ep \
-  --num_rewinds 1 \
-  --sigma0 1e-10 \
-  --sigma1 0.05 \
-  --lambda_mix 0.1 \
+  --per_device_train_batch_size 256 \
+  --learning_rate 1e-4 \
+  --clipping_threshold none \
+  --alpha_f 0.01 \
+  --sigma0 1e-12 \
+  --sigma1 0.01 \
+  --lambda_mix 0.01 \
   --alpha_i_lambda_mix 1.0 \
-  --alpha_f_lambda_mix 0.001 \
+  --alpha_f_lambda_mix 0.0001 \
   --initial_warmup_steps 1ep \
-  --final_warmup_steps 0ep \
-  --sparse_finetune_steps 1ep \
+  --sparse_finetune_steps 0ep \
   --pruning_interval 10 \
   --seed ${seed} \
   --initial_sparsity 0.3 \
   --final_sparsity ${sparsity} \
-  --run_name mnli_${sparsity}_${seed}_run16 \
-  --save_folder ./checkpoints/GLUE/mnli/${sparsity}/${seed}_run16 \
+  --run_name ${sparsity}_${seed}_run2 \
+  --save_folder ./checkpoints/upstream/${sparsity}/${seed}_run2 \
   --save_interval 0.05dur \
   --eval_interval 0.05dur \
-  --log_interval 1000
+  --log_interval 1000 \
+  --autoresume
