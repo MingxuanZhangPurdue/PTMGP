@@ -178,6 +178,12 @@ def parse_args():
 
     # training arguments
     parser.add_argument(
+        "--clipping_threshold",
+        type=float_and_none,
+        default=None,
+        help="Gradient clipping threshold."
+    )
+    parser.add_argument(
         "--precision",
         type=str,
         default=None,
