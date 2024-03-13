@@ -178,6 +178,12 @@ def parse_args():
 
     # training arguments
     parser.add_argument(
+        "--train_microbatch_size",
+        type=str_int_and_none,
+        default="auto",
+        help="The micro-batch size to use for training.",
+    )
+    parser.add_argument(
         "--clipping_threshold",
         type=float_and_none,
         default=None,
@@ -538,7 +544,7 @@ def main():
         train_dataloader=train_dataloader,
         optimizers=optimizer,
         max_duration=args.max_duration,
-        device_train_microbatch_size='auto',
+        device_train_microbatch_size=args.train_microbatch_size,
         device='gpu' if torch.cuda.is_available() else 'cpu',
         precision=args.precision,
         schedulers=lr_scheduler,
