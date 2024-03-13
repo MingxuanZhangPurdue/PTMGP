@@ -27,24 +27,28 @@ from upstream.utils_datasets import get_tokenized_mlm_datasets
 MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
-def my_custom_type(value):
+def str_int_and_none(value):
     try:
         # Try to convert the value to an integer
         return int(value)
     except ValueError:
         # If conversion to int fails, return the value as a string
-        return value
+        if value.casefold() == "none".casefold():
+            return None
+        else:
+            return value
     
-def my_custom_type2(value):
+def float_and_none(value):
     try:
-        # Try to convert the value to an integer
+        # Try to convert the value to a float
         return float(value)
     except ValueError:
-        # If conversion to int fails, return the value as a string
-        if value == "None":
+        # If conversion to float fails, return the value as a string
+        if value.casefold() == "none".casefold():
             return None
         else:
             raise ValueError(f"Unsupported value type {value}")
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Upstream prune a transformers model on a Masked Language Modeling task")
@@ -174,12 +178,6 @@ def parse_args():
 
     # training arguments
     parser.add_argument(
-        "--clipping_threshold",
-        type=my_custom_type2,
-        default=1.0,
-        help="The clipping threshold to use for the gradient clipping.",
-    )
-    parser.add_argument(
         "--precision",
         type=str,
         default=None,
@@ -207,7 +205,7 @@ def parse_args():
     parser.add_argument(
         "--max_duration", 
         type=str,   
-        default="13ep",
+        default="3ep",
         help="Total number of training epochs/batches/steps to perform."
     )
     parser.add_argument(
@@ -219,13 +217,13 @@ def parse_args():
     parser.add_argument(
         "--alpha_f",
         type=float,
-        default=0.001,
+        default=0.01,
         help="Final learning rate multiplier for the linear lr scheduler."
     )
 
     # checkpointing
     parser.add_argument(
-        "--run_name", 
+        "--run_name",
         type=str, 
         default=None, 
         help="Name of the run."
@@ -237,14 +235,14 @@ def parse_args():
         help="Folder to save the checkpoints."
     )
     parser.add_argument(
-        "--save_interval",     
+        "--save_interval",  
         type=str, 
         default="1ep", 
         help="Interval to save the checkpoints."
     )
     parser.add_argument(
-        "--autoresume", 
-        action="store_true", 
+        "--autoresume",
+        action="store_true",
         help="If passed, will resume the latest checkpoint if any."
     )
     parser.add_argument(
@@ -263,17 +261,17 @@ def parse_args():
         type=str, 
         default='ep{epoch}-ba{batch}-rank{rank}.pt', help="Filename to save the checkpoints."
     )
+    parser.add_argument(
+        "--load_path",
+        type=str,
+        default=None,
+        help="Path to load the checkpoint."
+    )
 
     # evaluation
     parser.add_argument(
-        "--log_param_stat_interval",
-        type=my_custom_type,
-        default=None,
-        help="Interval to log the parameter statistics."
-    )
-    parser.add_argument(
         "--eval_interval", 
-        type=my_custom_type, 
+        type=str_int_and_none, 
         default="1ep",
         help="Interval to evaluate the model."
     )
@@ -286,13 +284,13 @@ def parse_args():
 
     # wandb logging
     parser.add_argument(
-        "--wandb_project", 
+        "--wandb_project_name", 
         type=str, 
         default="upstream_bert_base", 
         help="The wandb project to log to."
     )
     parser.add_argument(
-        "--wandb_name", 
+        "--wandb_run_name", 
         type=str, 
         default=None, 
         help="The wandb run name."
@@ -305,50 +303,106 @@ def parse_args():
         default=42, 
         help="A seed for reproducible training."
     )
-    # cubic pruning scheduler
-    parser.add_argument("--final_ratio",        type=float,            default=0.1,   help="The final ratio of the remaining weights.")
-    parser.add_argument("--initial_ratio",      type=float,            default=1,     help="The initial ratio of the remaining weights.")
-    parser.add_argument("--initial_warmup",     type=my_custom_type,   default=1,     help="The number of training batches/steps for initial warmup.")
-    parser.add_argument("--final_warmup",       type=my_custom_type,   default=0,     help="The number of training batches/steps for final warmup.")
-    parser.add_argument("--deltaT",             type=my_custom_type,   default=100,    help="The interval to mask weights.")
-
-    # BReg
-    parser.add_argument("--sigma0",             type=float,            default=1e-15, help="The smaller variance of the Mixture Gaussian prior.")
-    parser.add_argument("--alpha_i_sigma0",     type=float,            default=1.0,   help="The initial factor value of the sigma0.")
-    parser.add_argument("--alpha_f_sigma0",     type=float,            default=1.0,   help="The final factor value of the sigma0.")
-
-    parser.add_argument("--sigma1",             type=float,            default=0.01,  help="The larger variance of the Mixture Gaussian prior.")
-    parser.add_argument("--alpha_i_sigma1",     type=float,            default=1.0,   help="The initial factor value of the sigma1.")
-    parser.add_argument("--alpha_f_sigma1",     type=float,            default=1.0,   help="The final factor value of the sigma1.")
     
-    parser.add_argument("--lambda_mix",         type=float,            default=1e-4,  help="The mixing coefficient of the Mixture Gaussian prior.")
-    parser.add_argument("--alpha_i_lambda",     type=float,            default=1.0,   help="The initial factor value of the lambda_mix.")
-    parser.add_argument("--alpha_f_lambda",     type=float,            default=0.001,  help="The final factor value of the lambda_mix.")
-
-    parser.add_argument("--anneal_start",       type=my_custom_type,   default=None,  help="The number of traing batches/steps for prior annealing to start.")
-    parser.add_argument("--anneal_end",         type=my_custom_type,   default=None,  help="The number of traing batches/steps for prior annealing to end.")
-
-    parser.add_argument("--masking_value",      type=float,            default=0.0,  help="The filling value of the masked weights.")
-    parser.add_argument('--non_prior_name',
-                        type=str,
-                        default=None,
-                        nargs='+',
-                        help="The names of the modules that should not be penalized by the prior, if any. We will match the names using regex.")
+    # pruning scheduler
     parser.add_argument(
-        '--init_prior_in_cooldown',
-        action='store_true',
-        help="If passed, will use the initial prior setting during the cubic prune cooldown period."
+        "--initial_sparsity",      
+        type=float,            
+        default=0.0,     
+        help="The initial sparsity of the model."
     )
-    parser.add_argument("--deltaT_cooldown",    type=my_custom_type,   default=100,    help="The interval to mask weights.")
-    parser.add_argument("--sparse_fine_tune",   type=my_custom_type,   default=0,      help="The number of training batches/steps for sparse fine-tuning.")
-
-    # pruning algorithm selection
     parser.add_argument(
-        '--non_mask_name', 
-        nargs='+',
-        type=str,
-        default=["layernorm", "classifier", "pooler", "embedding", "bias", "prediction"],
-        help="The names of the modules that should not be pruned. We will match the names using regex."
+        "--final_sparsity",        
+        type=float,            
+        default=0.0,   
+        help="The final sparsity of the model."
+    )
+    parser.add_argument(
+        "--initial_warmup_steps",    
+          type=str_int_and_none,   
+          default=0, 
+          help="The number of training batches/steps for initial warmup."
+    )
+    parser.add_argument(
+        "--sparse_finetune_steps",       
+        type=str_int_and_none,   
+        default=0,     
+        help="The number of training batches/steps for sparse finetuning."
+    )
+    parser.add_argument(
+        "--pruning_interval",             
+        type=str_int_and_none,   
+        default=10,    
+        help="The number of training steps between two pruning operations."
+    )
+
+    # MWA
+    parser.add_argument(
+        "--sigma0",             
+        type=float,            
+        default=1e-15, 
+        help="The base value of the sigma0."
+    )
+    parser.add_argument(
+        "--sigma1",             
+        type=float,            
+        default=0.1,   
+        help="The base value of the sigma1."
+    )
+    
+    parser.add_argument(
+        "--lambda_mix",         
+        type=float,            
+        default=1e-1,  
+        help="The base value of the lambda_mix."
+    )
+    parser.add_argument(
+        "--alpha_i_lambda_mix",
+        type=float,
+        default=1.0,
+        help="The initial factor value of the lambda_mix."
+    )
+    parser.add_argument(
+        "--alpha_f_lambda_mix",     
+        type=float,            
+        default=1.0,   
+        help="The final factor value of the lambda_mix."
+    )
+    parser.add_argument(
+        "--anneal_start_lambda_mix",
+        type=str_int_and_none,
+        default=None,
+        help="The start step to anneal the lambda_mix."
+    )
+    parser.add_argument(
+        "--anneal_end_lambda_mix",
+        type=str_int_and_none,
+        default=None,
+        help="The end step to anneal the lambda_mix."
+    )
+
+    # logging interval for GBReg
+    parser.add_argument(
+        "--log_interval",
+        type=str_int_and_none,
+        default=None,
+        help="Interval to log all research-related information."
+    )
+
+    # pruning configurations
+    parser.add_argument(
+        '--pruning_params', 
+        nargs='+', 
+        type=str, 
+        default=[ 
+            "bert.encoder.layer.*.attention.self.query.weight",
+            "bert.encoder.layer.*.attention.self.key.weight",
+            "bert.encoder.layer.*.attention.self.value.weight",
+            "bert.encoder.layer.*.attention.output.dense.weight",
+            "bert.encoder.layer.*.intermediate.dense.weight",
+            "bert.encoder.layer.*.output.dense.weight",
+        ],
+        help="The names of the modules that should be pruned. We will match the names using regex."
     )
 
     args = parser.parse_args()
@@ -366,8 +420,8 @@ def main():
 
     # initialize the wandb logger
     wandb_logger = WandBLogger(
-        project=args.wandb_project,
-        name=args.wandb_name,
+        project=args.wandb_project_name,
+        name=args.wandb_run_name,
         init_kwargs = {"config": vars(args)}
     )
 
@@ -469,7 +523,7 @@ def main():
         max_train_steps = train_time.value
     else:
         raise ValueError(f"Unsupported time unit: {train_time.unit}")
-    pruner_algorithm = pruner_algorithm = BReg.from_args(train_size, max_train_steps, len(train_dataloader), args)
+    pruner_algorithm = pruner_algorithm = MWA.from_args(train_size, max_train_steps, len(train_dataloader), args)
 
     # initialize the trainer
     trainer = Trainer(
@@ -504,6 +558,7 @@ def main():
         save_latest_filename=args.save_latest_filename,
         save_overwrite=args.save_overwrite,
         autoresume=args.autoresume,
+        load_path=args.load_path,
 
         # reproducibility
         seed=args.seed,
@@ -512,15 +567,15 @@ def main():
     # Train
     trainer.fit()
 
-    # Save the final ratio mask
-    if pruner_algorithm.final_ratio_mask is not None:
-        final_ratio_mask = pruner_algorithm.final_ratio_mask
+    # Save the final fixed mask
+    if pruner_algorithm.final_fixed_mask is not None:
+        final_fixed_mask = pruner_algorithm.final_fixed_mask
         if args.save_folder is not None:
-            torch.save(final_ratio_mask, f"{args.save_folder}/final_ratio_mask.pt")
+            torch.save(final_fixed_mask, f"{args.save_folder}/final_fixed_mask.pt")
         else:
-            print ("Warning: no save folder to save the final ratio mask.")
+            print ("Warning: no save folder to save the final fixed mask.")
     else:
-        print("Warning: no final ratio mask to save.")
+        print("Warning: no final fixed mask to save.")
 
 if __name__ == "__main__":
     main()
