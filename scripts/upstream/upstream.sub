@@ -21,9 +21,9 @@ composer -m -n 4 upstream.train \
   --learning_rate 1e-4 \
   --clipping_threshold none \
   --alpha_f 0.01 \
-  --sigma0 1e-10 \
+  --sigma0 1e-8 \
   --sigma1 0.01 \
-  --lambda_mix 0.1 \
+  --lambda_mix 1e-4 \
   --alpha_i_lambda_mix 1.0 \
   --alpha_f_lambda_mix 0.001 \
   --initial_warmup_steps 1ep \

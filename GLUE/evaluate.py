@@ -29,6 +29,12 @@ def parse_args():
         help="Path to pretrained model or model identifier from huggingface.co/models.",
     )
     parser.add_argument(
+        "--load_path",
+        default=None,
+        type=str,
+        help="Path to the pruned model to evaluate.",
+    )
+    parser.add_argument(
         "--task_name",
         type=str,
         required=True,
@@ -138,6 +144,7 @@ def main():
         cache_dir=args.cache_dir,
         ignore_mismatched_sizes=args.ignore_mismatched_sizes,
         trust_remote_code=args.trust_remote_code,
+        state_dict = torch.load(args.load_path)["state"]["model"] if args.load_path is not Noe else None
     )
 
     sentence1_key, sentence2_key = task_to_keys[args.task_name]
