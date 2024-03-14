@@ -4,7 +4,7 @@ import torch
 from torch.utils.data import DataLoader
 from datasets import load_dataset
 from evaluate import load
-from transformers import AutoModelForSequenceClassification, AutoConfig, AutoTokenizer, default_data_collator
+from transformers import AutoModelForSequenceClassification, AutoConfig, AutoTokenizer, DataCollatorWithPadding
 from composer.utils.dist import get_sampler
 
 task_to_keys = {
@@ -108,14 +108,15 @@ def main():
     else:
         split = "validation"
 
-    raw_datasets = load_dataset(
+    raw_dataset = load_dataset(
         "glue",
         args.task_name,
+        split=split,
         cache_dir=args.cache_dir,
         trust_remote_code=args.trust_remote_code,
     )
 
-    label_list = raw_datasets["train"].features["label"].names
+    label_list = raw_dataset.features["label"].names
     num_labels = len(label_list)
 
     tokenizer = AutoTokenizer.from_pretrained(
@@ -141,8 +142,6 @@ def main():
 
     sentence1_key, sentence2_key = task_to_keys[args.task_name]
 
-    padding = "max_length" if args.pad_to_max_length else False
-
     if args.max_seq_length > tokenizer.model_max_length:
         warnings.warn(
             f"The max_seq_length passed ({args.max_seq_length}) is larger than the maximum length for the "
@@ -155,31 +154,24 @@ def main():
         texts = (
             (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
         )
-        result = tokenizer(*texts, padding=padding, max_length=max_seq_length, truncation=True)
+        result = tokenizer(*texts, padding=False, max_length=max_seq_length, truncation=True)
 
         if "label" in examples:
             # in all cases, rename the column to labels because the model will expect that.
             result["labels"] = examples["label"]
         return result
 
-    processed_datasets = raw_datasets.map(
-            preprocess_function,
-            batched=True,
-            num_proc=args.preprocessing_num_workers,
-            remove_columns=raw_datasets["train"].column_names,
-            load_from_cache_file=not args.overwrite_cache,
-            desc="Running tokenizer on dataset",
+    eval_dataset = raw_dataset.map(
+        preprocess_function,
+        batched=True,
+        num_proc=args.preprocessing_num_workers,
+        remove_columns=raw_dataset.column_names,
+        load_from_cache_file=not args.overwrite_cache,
+        desc="Running tokenizer on dataset",
     )
-    
-    if args.task_name == "mnli":
-        eval_dataset = processed_datasets["validation_matched"]
-    elif args.task_name == "mnli_mismatched":
-        eval_dataset = processed_datasets["validation_mismatched"]
-    else:
-        eval_dataset = processed_datasets["validation"]
 
-    eval_sampler = get_sampler(eval_dataset, shuffle=False)
-    eval_dataloader = DataLoader(eval_dataset, collate_fn=default_data_collator, batch_size=args.eval_batch_size, sampler=eval_sampler)
+    data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=None)
+    eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=args.eval_batch_size)
 
     y_hat = []
     y = []
