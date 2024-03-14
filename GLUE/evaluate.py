@@ -131,6 +131,7 @@ def main():
         use_fast=not args.use_slow_tokenizer,
         trust_remote_code=args.trust_remote_code,
     )
+    
     config = AutoConfig.from_pretrained(
         args.model_name_or_path,
         num_labels=num_labels,
@@ -138,6 +139,7 @@ def main():
         cache_dir=args.cache_dir,
         trust_remote_code=args.trust_remote_code,
     )
+
     model_state_dict = torch.load(args.load_path)["state"]["model"] if args.load_path is not None else None
     if model_state_dict is not None:
         for key in list(model_state_dict.keys()):
