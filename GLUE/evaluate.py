@@ -138,20 +138,20 @@ def main():
         cache_dir=args.cache_dir,
         trust_remote_code=args.trust_remote_code,
     )
+    model_state_dict = torch.load(args.load_path)["state"]["model"] if args.load_path is not None else None
+    if model_state_dict is not None:
+        for key in model_state_dict.keys():
+            parts = key.split('.')
+            new_key = '.'.join(parts[1:])
+            model_state_dict[new_key] =  model_state_dict.pop(key)
     model = AutoModelForSequenceClassification.from_pretrained(
         args.model_name_or_path,
         config=config,
         cache_dir=args.cache_dir,
         ignore_mismatched_sizes=args.ignore_mismatched_sizes,
         trust_remote_code=args.trust_remote_code,
-        #state_dict = torch.load(args.load_path)["state"]["model"] if args.load_path is not None else None
+        state_dict = model_state_dict
     )
-
-    print (model.state_dict().keys())
-    state_dict = torch.load(args.load_path)
-    print (state_dict["state"]["model"].keys())
-    model.load_state_dict(state_dict["state"]["model"])
-
     sentence1_key, sentence2_key = task_to_keys[args.task_name]
 
     if args.max_seq_length > tokenizer.model_max_length:
