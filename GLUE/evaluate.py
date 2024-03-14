@@ -148,7 +148,7 @@ def main():
     )
 
     print (model.state_dict().keys())
-    state_dict = torch.load(args.load_path)["state"]["model"]
+    state_dict = torch.load(args.load_path)
     print (state_dict["state"]["model"].keys())
     model.load_state_dict(state_dict["state"]["model"])
 
