@@ -109,8 +109,8 @@ def main():
         split = "validation"
 
     raw_dataset = load_dataset(
-        "nyu-mll/glue",
-        args.task_name,
+        "glue",
+        args.task_name if args.task_name != "mnli_mismatched" else "mnli",
         split=split,
         cache_dir=args.cache_dir,
         trust_remote_code=args.trust_remote_code,
