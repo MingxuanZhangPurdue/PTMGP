@@ -149,7 +149,7 @@ def main():
 
     print (model.state_dict().keys())
     state_dict = torch.load(args.load_path)["state"]["model"]
-    print (state_dict().keys())
+    print (state_dict["state"]["model"].keys())
     model.load_state_dict(state_dict["state"]["model"])
 
     sentence1_key, sentence2_key = task_to_keys[args.task_name]
