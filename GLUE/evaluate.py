@@ -1,11 +1,11 @@
 import argparse
 import warnings
 import torch
+from tqdm import tqdm
 from torch.utils.data import DataLoader
 from datasets import load_dataset
 from evaluate import load
 from transformers import AutoModelForSequenceClassification, AutoConfig, AutoTokenizer, DataCollatorWithPadding
-from composer.utils.dist import get_sampler
 
 task_to_keys = {
     "mnli": ("premise", "hypothesis"),
@@ -38,7 +38,7 @@ def parse_args():
     parser.add_argument(
         "--eval_batch_size",
         type=int,
-        default=16,
+        default=128,
         help="Batch size for evaluation.",
     )
     parser.add_argument(
@@ -176,7 +176,7 @@ def main():
     y_hat = []
     y = []
     model.eval()
-    for step, batch in enumerate(eval_dataloader):
+    for batch in tqdm(eval_dataloader):
         with torch.no_grad():
             outputs = model(**batch)
         y_hat.append(outputs.logits.argmax(dim=-1))
