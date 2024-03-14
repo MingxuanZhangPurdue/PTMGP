@@ -179,3 +179,6 @@ def main():
         metric = load(args.task_name)
     result = metric.compute(predictions=y_hat, references=y)
     print(result)
+
+if __name__ == "__main__":
+    main()
