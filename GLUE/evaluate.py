@@ -144,7 +144,7 @@ def main():
         cache_dir=args.cache_dir,
         ignore_mismatched_sizes=args.ignore_mismatched_sizes,
         trust_remote_code=args.trust_remote_code,
-        state_dict = torch.load(args.load_path)["state"]["model"] if args.load_path is not Noe else None
+        state_dict = torch.load(args.load_path)["state"]["model"] if args.load_path is not None else None
     )
 
     sentence1_key, sentence2_key = task_to_keys[args.task_name]
