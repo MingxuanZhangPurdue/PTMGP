@@ -504,8 +504,6 @@ def main():
         metrics = [PearsonCorrCoef(), SpearmanCorrCoef()]
     elif args.task_name == "cola":
         metrics = [MulticlassMatthewsCorrCoef(num_classes=num_labels)]
-    elif args.task_name == "mrpc" or args.task_name == "qqp":
-        metrics = [MulticlassAccuracy(num_classes=num_labels, average='micro'), MulticlassF1Score(num_classes=num_labels, average='micro')]
     else:
         metrics = [MulticlassAccuracy(num_classes=num_labels, average='micro')]
 
