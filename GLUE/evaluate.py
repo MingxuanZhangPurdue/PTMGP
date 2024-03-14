@@ -37,7 +37,7 @@ def parse_args():
     parser.add_argument(
         "--eval_batch_size",
         type=int,
-        default=32,
+        default=16,
         help="Batch size for evaluation.",
     )
     parser.add_argument(
@@ -156,7 +156,7 @@ def main():
             desc="Running tokenizer on dataset",
     )
 
-    eval_dataloader = DataLoader(eval_dataset, batch_size=args.eval_batch_size, collate_fn=default_data_collator, shuffle=False)
+    eval_dataloader = DataLoader(eval_dataset, batch_size=args.eval_batch_size, collate_fn=default_data_collator)
 
     config = AutoConfig.from_pretrained(
         args.model_name_or_path,
