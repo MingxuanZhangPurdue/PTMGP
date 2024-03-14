@@ -1,10 +1,10 @@
 import argparse
 import warnings
 import torch
+import evaluate
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from datasets import load_dataset
-from evaluate import load
 from transformers import AutoModelForSequenceClassification, AutoConfig, AutoTokenizer, DataCollatorWithPadding
 
 task_to_keys = {
@@ -187,11 +187,12 @@ def main():
     y = torch.cat(y)
 
     if args.task_name in ["mnli", "mnli_mismatched"]:
-        metric = load("mnli")
+        metrics = evaluate.combine(["accuracy"])
     else:
-        metric = load(args.task_name)
-    result = metric.compute(predictions=y_hat, references=y)
-    print(result)
+        metrics = evaluate.combine(["accuracy", "f1"])
+
+    result = metrics.compute(references=y, predictions=y_hat)
+    print (result)
 
 if __name__ == "__main__":
     main()
