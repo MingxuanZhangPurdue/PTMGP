@@ -176,12 +176,11 @@ def main():
     y_hat = []
     y = []
     model.eval()
-    for batch in eval_dataloader:
-        inputs, targets = batch
+    for step, batch in enumerate(eval_dataloader):
         with torch.no_grad():
-            outputs = model(**inputs)
-        y_hat.append(outputs.argmax(dim=-1))
-        y.append(targets)
+            outputs = model(**batch)
+        y_hat.append(outputs.logits.argmax(dim=-1))
+        y.append(batch["labels"])
     y_hat = torch.cat(y_hat)
     y = torch.cat(y)
 
