@@ -4,7 +4,7 @@ import torch
 from torch.utils.data import DataLoader
 from datasets import load_dataset
 from evaluate import load
-from transformers import AutoModelForSequenceClassification, AutoConfig, AutoTokenizer
+from transformers import AutoModelForSequenceClassification, AutoConfig, AutoTokenizer, default_data_collator
 
 task_to_keys = {
     "mnli": ("premise", "hypothesis"),
@@ -156,7 +156,7 @@ def main():
             desc="Running tokenizer on dataset",
     )
 
-    eval_dataloader = DataLoader(eval_dataset, batch_size=args.eval_batch_size, shuffle=False)
+    eval_dataloader = DataLoader(eval_dataset, batch_size=args.eval_batch_size, collate_fn=default_data_collator, shuffle=False)
 
     config = AutoConfig.from_pretrained(
         args.model_name_or_path,
