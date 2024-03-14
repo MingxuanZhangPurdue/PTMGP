@@ -38,7 +38,7 @@ def parse_args():
     parser.add_argument(
         "--eval_batch_size",
         type=int,
-        default=128,
+        default=256,
         help="Batch size for evaluation.",
     )
     parser.add_argument(
@@ -175,6 +175,7 @@ def main():
 
     y_hat = []
     y = []
+    model = model.to("cuda") if torch.cuda.is_available() else model
     model.eval()
     for batch in tqdm(eval_dataloader):
         with torch.no_grad():
