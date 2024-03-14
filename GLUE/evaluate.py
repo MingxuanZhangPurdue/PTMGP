@@ -35,6 +35,18 @@ def parse_args():
         choices=list(task_to_keys.keys()),
     )
     parser.add_argument(
+        "--eval_batch_size",
+        type=int,
+        default=32,
+        help="Batch size for evaluation.",
+    )
+    parser.add_argument(
+        "--preprocessing_num_workers",
+        type=int,
+        default=None,
+        help="The number of processes to use for the preprocessing.",
+    )
+    parser.add_argument(
         "--overwrite_cache",
         action="store_true",
         help="Overwrite the cached training and evaluation sets",
