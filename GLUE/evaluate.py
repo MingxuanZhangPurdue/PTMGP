@@ -179,7 +179,7 @@ def main():
         eval_dataset = processed_datasets["validation"]
 
     eval_sampler = get_sampler(eval_dataset, shuffle=False)
-    eval_dataloader = DataLoader(eval_dataset, collate_fn=default_data_collator, batch_size=args.per_device_eval_batch_size, sampler=eval_sampler)
+    eval_dataloader = DataLoader(eval_dataset, collate_fn=default_data_collator, batch_size=args.eval_batch_size, sampler=eval_sampler)
 
     y_hat = []
     y = []
