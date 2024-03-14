@@ -140,7 +140,7 @@ def main():
     )
     model_state_dict = torch.load(args.load_path)["state"]["model"] if args.load_path is not None else None
     if model_state_dict is not None:
-        for key in model_state_dict.keys():
+        for key in list(model_state_dict.keys()):
             parts = key.split('.')
             new_key = '.'.join(parts[1:])
             model_state_dict[new_key] =  model_state_dict.pop(key)
@@ -152,7 +152,7 @@ def main():
         trust_remote_code=args.trust_remote_code,
         state_dict = model_state_dict
     )
-    
+
     sentence1_key, sentence2_key = task_to_keys[args.task_name]
 
     if args.max_seq_length > tokenizer.model_max_length:
