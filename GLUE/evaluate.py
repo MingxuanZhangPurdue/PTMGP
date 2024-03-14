@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 from datasets import load_dataset
 from evaluate import load
 from transformers import AutoModelForSequenceClassification, AutoConfig, AutoTokenizer, default_data_collator
+from composer.utils.dist import get_sampler
 
 task_to_keys = {
     "mnli": ("premise", "hypothesis"),
@@ -113,15 +114,30 @@ def main():
         cache_dir=args.cache_dir,
         trust_remote_code=args.trust_remote_code,
     )
+
+    label_list = raw_datasets["train"].features["label"].names
+    num_labels = len(label_list)
+
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_name_or_path if args.tokenizer_name_or_path is None else args.tokenizer_name_or_path,
         cache_dir=args.cache_dir,
         use_fast=not args.use_slow_tokenizer,
         trust_remote_code=args.trust_remote_code,
     )
-
-    label_list = raw_datasets["train"].features["label"].names
-    num_labels = len(label_list)
+    config = AutoConfig.from_pretrained(
+        args.model_name_or_path,
+        num_labels=num_labels,
+        finetuning_task=args.task_name,
+        cache_dir=args.cache_dir,
+        trust_remote_code=args.trust_remote_code,
+    )
+    model = AutoModelForSequenceClassification.from_pretrained(
+        args.model_name_or_path,
+        config=config,
+        cache_dir=args.cache_dir,
+        ignore_mismatched_sizes=args.ignore_mismatched_sizes,
+        trust_remote_code=args.trust_remote_code,
+    )
 
     sentence1_key, sentence2_key = task_to_keys[args.task_name]
 
@@ -162,22 +178,8 @@ def main():
     else:
         eval_dataset = processed_datasets["validation"]
 
-    eval_dataloader = DataLoader(eval_dataset, batch_size=args.eval_batch_size, collate_fn=default_data_collator)
-
-    config = AutoConfig.from_pretrained(
-        args.model_name_or_path,
-        num_labels=num_labels,
-        finetuning_task=args.task_name,
-        cache_dir=args.cache_dir,
-        trust_remote_code=args.trust_remote_code,
-    )
-    model = AutoModelForSequenceClassification.from_pretrained(
-        args.model_name_or_path,
-        config=config,
-        cache_dir=args.cache_dir,
-        ignore_mismatched_sizes=args.ignore_mismatched_sizes,
-        trust_remote_code=args.trust_remote_code,
-    )
+    eval_sampler = get_sampler(eval_dataset, shuffle=False)
+    eval_dataloader = DataLoader(eval_dataset, collate_fn=default_data_collator, batch_size=args.per_device_eval_batch_size, sampler=eval_sampler)
 
     y_hat = []
     y = []
