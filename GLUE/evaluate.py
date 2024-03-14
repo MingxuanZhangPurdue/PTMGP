@@ -147,9 +147,9 @@ def main():
         #state_dict = torch.load(args.load_path)["state"]["model"] if args.load_path is not None else None
     )
 
-    print (model.state_dict.keys())
+    print (model.state_dict().keys())
     state_dict = torch.load(args.load_path)["state"]["model"]
-    print (state_dict.keys())
+    print (state_dict().keys())
     model.load_state_dict(state_dict["state"]["model"])
 
     sentence1_key, sentence2_key = task_to_keys[args.task_name]
