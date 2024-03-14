@@ -152,6 +152,7 @@ def main():
         trust_remote_code=args.trust_remote_code,
         state_dict = model_state_dict
     )
+    
     sentence1_key, sentence2_key = task_to_keys[args.task_name]
 
     if args.max_seq_length > tokenizer.model_max_length:
