@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning a 🤗 Transformers model for question answering using 🤗 Accelerate.
+Downstream prune a 🤗 Transformers model for question answering using 🤗 Accelerate.
 """
 # You can also adapt this script on your own question answering task. Pointers for this are left as comments.
 
@@ -55,7 +55,7 @@ from transformers import (
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
-from pruners.BReg import BReg
+from pruners.MWA import MWA
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
