@@ -178,6 +178,7 @@ def main():
     model = model.to("cuda") if torch.cuda.is_available() else model
     model.eval()
     for batch in tqdm(eval_dataloader):
+        print (len(batch))
         with torch.no_grad():
             outputs = model(**batch)
         y_hat.append(outputs.logits.argmax(dim=-1))
