@@ -107,10 +107,9 @@ def main():
     else:
         split = "validation"
 
-    raw_dataset = load_dataset(
+    raw_datasets = load_dataset(
         "glue",
         args.task_name,
-        split=split,
         cache_dir=args.cache_dir,
         trust_remote_code=args.trust_remote_code,
     )
@@ -121,10 +120,10 @@ def main():
         trust_remote_code=args.trust_remote_code,
     )
 
-    sentence1_key, sentence2_key = task_to_keys[args.task_name]
-
-    label_list = raw_dataset.features["label"].names
+    label_list = raw_datasets["train"].features["label"].names
     num_labels = len(label_list)
+
+    sentence1_key, sentence2_key = task_to_keys[args.task_name]
 
     padding = "max_length" if args.pad_to_max_length else False
 
@@ -147,14 +146,21 @@ def main():
             result["labels"] = examples["label"]
         return result
 
-    eval_dataset = raw_dataset.map(
+    processed_datasets = raw_datasets.map(
             preprocess_function,
             batched=True,
             num_proc=args.preprocessing_num_workers,
-            remove_columns=raw_dataset.column_names,
+            remove_columns=raw_datasets["train"].column_names,
             load_from_cache_file=not args.overwrite_cache,
             desc="Running tokenizer on dataset",
     )
+    
+    if args.task_name == "mnli":
+        eval_dataset = processed_datasets["validation_matched"]
+    elif args.task_name == "mnli_mismatched":
+        eval_dataset = processed_datasets["validation_mismatched"]
+    else:
+        eval_dataset = processed_datasets["validation"]
 
     eval_dataloader = DataLoader(eval_dataset, batch_size=args.eval_batch_size, collate_fn=default_data_collator)
 
