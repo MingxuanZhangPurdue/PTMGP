@@ -184,7 +184,7 @@ def main():
     )
 
     data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=None)
-    eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=args.eval_batch_size)
+    eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=args.eval_batch_size, shuffle=False)
 
     y_hat = []
     y = []
