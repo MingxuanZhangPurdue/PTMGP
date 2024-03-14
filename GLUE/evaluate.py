@@ -16,12 +16,6 @@ task_to_keys = {
 def parse_args():
     parser = argparse.ArgumentParser(description="Evaluate a pruned model a glue task.")
     parser.add_argument(
-        "--tokenizer_name_or_path",
-        type=str,
-        default=None,
-        help="Pretrained tokenizer name or path if not the same as model_name",
-    )
-    parser.add_argument(
         "--model_name_or_path",
         default=None,
         type=str,
@@ -126,12 +120,12 @@ def main():
     num_labels = len(label_list)
 
     tokenizer = AutoTokenizer.from_pretrained(
-        args.model_name_or_path if args.tokenizer_name_or_path is None else args.tokenizer_name_or_path,
+        args.model_name_or_path,
         cache_dir=args.cache_dir,
         use_fast=not args.use_slow_tokenizer,
         trust_remote_code=args.trust_remote_code,
     )
-    
+
     config = AutoConfig.from_pretrained(
         args.model_name_or_path,
         num_labels=num_labels,
