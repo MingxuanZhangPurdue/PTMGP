@@ -323,18 +323,6 @@ def parse_args():
     #  Pruner arguments  #
     ######################
     parser.add_argument(
-        "wandb_project_name",
-        type=str,
-        default="SQuAD",
-        help="The name of the wandb project."
-    )
-    parser.add_argument(
-        "wandb_run_name",
-        type=str,
-        default=None,
-        help="The name of the wandb run."
-    )
-    parser.add_argument(
         "--initial_sparsity",      
         type=float,            
         default=0.0,     
@@ -944,12 +932,8 @@ def main():
         #  Specify run and project name  #
         ##################################
         accelerator.init_trackers(
-            args.wandb_project_name, 
+            "SQuAD", 
             experiment_config,
-            init_kwargs={"wandb": 
-                            {"name": args.wandb_run_name,
-                            }
-                        }
         )
 
     #####################
