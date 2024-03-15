@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Downstream prune a 🤗 Transformers model for question answering using 🤗 Accelerate.
+Fine-tuning a 🤗 Transformers model for question answering using 🤗 Accelerate.
 """
 # You can also adapt this script on your own question answering task. Pointers for this are left as comments.
 
@@ -34,7 +34,7 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from datasets import load_dataset
-from huggingface_hub import Repository, create_repo
+from huggingface_hub import HfApi
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from utils_qa import postprocess_qa_predictions
@@ -55,11 +55,13 @@ from transformers import (
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
+###################
+#  Import pruner  #
+###################
 from pruners.MWA import MWA
 
-
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-# check_min_version("4.38.0.dev0")
+#check_min_version("4.39.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
@@ -125,7 +127,7 @@ def parse_args():
         default=384,
         help=(
             "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
-            " sequences shorter will be padded if `--pad_to_max_lengh` is passed."
+            " sequences shorter will be padded if `--pad_to_max_length` is passed."
         ),
     )
     parser.add_argument(
@@ -159,13 +161,13 @@ def parse_args():
     parser.add_argument(
         "--per_device_train_batch_size",
         type=int,
-        default=32,
+        default=8,
         help="Batch size (per device) for the training dataloader.",
     )
     parser.add_argument(
         "--per_device_eval_batch_size",
         type=int,
-        default=128,
+        default=8,
         help="Batch size (per device) for the evaluation dataloader.",
     )
     parser.add_argument(
@@ -280,7 +282,7 @@ def parse_args():
         type=bool,
         default=False,
         help=(
-            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
             "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
             "execute code present on the Hub on your local machine."
         ),
@@ -313,7 +315,9 @@ def parse_args():
         ),
     )
 
-     # pruning scheduler
+    ######################
+    #  Pruner arguments  #
+    ######################
     parser.add_argument(
         "--initial_sparsity",      
         type=float,            
@@ -344,8 +348,6 @@ def parse_args():
         default=10,    
         help="The number of training steps between two pruning operations."
     )
-
-    # MWA
     parser.add_argument(
         "--clipping_threshold",
         type=float,
@@ -395,16 +397,12 @@ def parse_args():
         default=None,
         help="The end step to anneal the lambda_mix."
     )
-
-    # logging interval for GBReg
     parser.add_argument(
         "--log_interval",
         type=int,
         default=None,
         help="Interval to log all research-related information."
     )
-
-    # pruning configurations
     parser.add_argument(
         '--pruning_params', 
         nargs='+', 
@@ -491,9 +489,8 @@ def main():
             if repo_name is None:
                 repo_name = Path(args.output_dir).absolute().name
             # Create repo and retrieve repo_id
-            repo_id = create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
-            # Clone repo locally
-            repo = Repository(args.output_dir, clone_from=repo_id, token=args.hub_token)
+            api = HfApi()
+            repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
 
             with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
                 if "step_*" not in gitignore:
@@ -570,7 +567,7 @@ def main():
         model = AutoModelForQuestionAnswering.from_config(config, trust_remote_code=args.trust_remote_code)
 
     # Preprocessing the datasets.
-    # Preprocessing is slighlty different for training and evaluation.
+    # Preprocessing is slightly different for training and evaluation.
 
     column_names = raw_datasets["train"].column_names
 
@@ -671,7 +668,7 @@ def main():
         raise ValueError("--do_train requires a train dataset")
     train_dataset = raw_datasets["train"]
     if args.max_train_samples is not None:
-        # We will select sample from whole data if agument is specified
+        # We will select sample from whole data if argument is specified
         train_dataset = train_dataset.select(range(args.max_train_samples))
 
     # Create train feature from dataset
@@ -921,19 +918,13 @@ def main():
         experiment_config = vars(args)
         # TensorBoard cannot log Enums, need the raw value
         experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
-        ######################
-        #  Flexible tracker  #
-        ######################
-        accelerator.init_trackers(project_name=args.wandb_project_name,
-                                  config=experiment_config,
-                                 )
-
+        accelerator.init_trackers("qa_no_trainer", experiment_config)
 
     #####################
     #  Init the pruner  #
     #####################
     pruner = MWA(
-        train_size=len(train_dataset), 
+        train_size=len(train_dataset),
         max_train_steps=args.max_train_steps,
         sigma0=args.sigma0,
         sigma1=args.sigma1,
@@ -951,7 +942,6 @@ def main():
         pruning_params=args.pruning_params,
         clipping_threshold=args.clipping_threshold,
     )
-    pruner.print_pruning_modules(model)
 
     # Train!
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -1020,9 +1010,9 @@ def main():
             step=completed_steps,
         )
 
-    ##################################################################################
-    #  Generated the final fixed mask in case resuming training after pruning ended  #
-    ##################################################################################
+    ################################################################################
+    #  Generated the final fixed mask in case resuming training after pruning_end  #
+    ################################################################################
     if (completed_steps > pruner.pruning_end and
         pruner.final_fixed_mask is None):
         print ("Generate the final fixed mask first...")
@@ -1048,9 +1038,9 @@ def main():
 
                 accelerator.backward(loss)
 
-                #########################
-                #  Add prior gradients  # 
-                #########################
+                ##########################
+                #  Apply prior gradient  # 
+                ##########################
                 if completed_steps <= pruner.pruning_end:
                     prior_threshold, sigma0, sigma1, lambda_mix = pruner.apply_prior_grad(model, completed_steps)
                     ################
@@ -1077,7 +1067,7 @@ def main():
                 optimizer.step()
 
                 ################
-                #  Logging #3  # 
+                #  Logging #3  #
                 ################
                 if (pruner.log_interval is not None and
                     args.with_tracking and
@@ -1090,9 +1080,9 @@ def main():
                         step=completed_steps,
                     )
                     
-                #########################################################
-                #  Prune the model based on the current sparsity level  #                                
-                #########################################################
+                ###########################################################
+                #  Prune the model based on the scheduled sparsity level  #                                
+                ###########################################################
                 sparsity, mask_threshold, mask = pruner.magnitude_pruning(model, completed_steps)
                 if mask is not None:
                     pruner.current_sparsity_mask = mask
@@ -1159,8 +1149,12 @@ def main():
             )
             if accelerator.is_main_process:
                 tokenizer.save_pretrained(args.output_dir)
-                repo.push_to_hub(
-                    commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
+                api.upload_folder(
+                    commit_message=f"Training in progress epoch {epoch}",
+                    folder_path=args.output_dir,
+                    repo_id=repo_id,
+                    repo_type="model",
+                    token=args.hub_token,
                 )
 
     # Evaluation
@@ -1260,8 +1254,13 @@ def main():
         if accelerator.is_main_process:
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
-                repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
-
+                api.upload_folder(
+                    commit_message="End of training",
+                    folder_path=args.output_dir,
+                    repo_id=repo_id,
+                    repo_type="model",
+                    token=args.hub_token,
+                )
             logger.info(json.dumps(eval_metric, indent=4))
             save_prefixed_metrics(eval_metric, args.output_dir)
 
