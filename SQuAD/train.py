@@ -1090,7 +1090,7 @@ def main():
                     completed_steps > pruner.pruning_start and
                     completed_steps <= pruner.pruning_end and
                     completed_steps % pruner.log_interval == 0):
-                    n_param_below_prior_threshold, in_spike_mask = pruner.count_param_below_prior_threshold(model, pruner.urrent_prior_threshold)
+                    n_param_below_prior_threshold, in_spike_mask = pruner.count_param_below_prior_threshold(model, pruner.current_prior_threshold)
                     accelerator.log(
                         {"pruning/percent_remained_in_spike": float(n_param_below_prior_threshold/pruner.n_total_param_for_pruning)},
                         step=completed_steps,
