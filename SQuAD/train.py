@@ -512,7 +512,12 @@ def main():
     # download the dataset.
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name)
+
+        ###########################
+        #  Load the dataset here  #
+        ###########################
+        raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name, cache_dir="./cache")
+
     else:
         data_files = {}
         if args.train_file is not None:
