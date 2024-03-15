@@ -323,6 +323,18 @@ def parse_args():
     #  Pruner arguments  #
     ######################
     parser.add_argument(
+        "wandb_project_name",
+        type=str,
+        default="SQuAD",
+        help="The name of the wandb project."
+    )
+    parser.add_argument(
+        "wandb_run_name",
+        type=str,
+        default=None,
+        help="The name of the wandb run."
+    )
+    parser.add_argument(
         "--initial_sparsity",      
         type=float,            
         default=0.0,     
@@ -927,7 +939,18 @@ def main():
         experiment_config = vars(args)
         # TensorBoard cannot log Enums, need the raw value
         experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
-        accelerator.init_trackers("qa_no_trainer", experiment_config)
+
+        ##################################
+        #  Specify run and project name  #
+        ##################################
+        accelerator.init_trackers(
+            args.wandb_project_name, 
+            experiment_config,
+            init_kwargs={"wandb": 
+                            {"name": args.wandb_run_name,
+                            }
+                        }
+        )
 
     #####################
     #  Init the pruner  #
