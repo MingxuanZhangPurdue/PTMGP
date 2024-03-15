@@ -1211,6 +1211,15 @@ def main():
     eval_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)
     logger.info(f"Evaluation metrics: {eval_metric}")
 
+    ################
+    #  Logging #6  #
+    ################
+    if args.with_tracking:
+        accelerator.log(
+        {"eval_metric": eval_metric},
+        step=completed_steps,
+        )
+
     # Prediction
     if args.do_predict:
         logger.info("***** Running Prediction *****")
