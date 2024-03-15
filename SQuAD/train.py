@@ -941,7 +941,7 @@ def main():
         alpha_i_lambda_mix=args.alpha_i_lambda_mix, 
         alpha_f_lambda_mix=args.alpha_f_lambda_mix,
         anneal_start_lambda_mix=args.anneal_start_lambda_mix, 
-        anneal_end_lambda_mix=args.anneal_end_lambda_mix
+        anneal_end_lambda_mix=args.anneal_end_lambda_mix,
         initial_sparsity=args.initial_sparsity,
         final_sparsity=args.final_sparsity,
         initial_warmup_steps=args.initial_warmup_steps,
