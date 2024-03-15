@@ -62,6 +62,7 @@ from transformers.utils.versions import require_version
 ###################
 #  Import pruner  #
 ###################
+from torch.optim.lr_scheduler import LinearLR
 from pruners.MWA import MWA
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -322,6 +323,12 @@ def parse_args():
     ######################
     #  Pruner arguments  #
     ######################
+    parser.add_argument(
+        "--alpha_f",
+        type=float,
+        default=0.1,
+        help="The final factor value of the alpha for linear lr scheduler."
+    )
     parser.add_argument(
         "--initial_sparsity",      
         type=float,            
@@ -895,6 +902,16 @@ def main():
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
         overrode_max_train_steps = True
 
+    ##################################
+    #  Use Pytorch linear scheduler  #
+    ##################################
+    lr_scheduler = LinearLR(
+        optimizer,
+        start_factor=1.0,
+        end_factor=args.alpha_f,
+        total_iters=args.max_train_steps,
+    )
+    """
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler_type,
         optimizer=optimizer,
@@ -903,6 +920,7 @@ def main():
         if overrode_max_train_steps
         else args.max_train_steps * accelerator.num_processes,
     )
+    """
 
     # Prepare everything with our `accelerator`.
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
