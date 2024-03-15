@@ -159,13 +159,13 @@ def parse_args():
     parser.add_argument(
         "--per_device_train_batch_size",
         type=int,
-        default=8,
+        default=32,
         help="Batch size (per device) for the training dataloader.",
     )
     parser.add_argument(
         "--per_device_eval_batch_size",
         type=int,
-        default=8,
+        default=128,
         help="Batch size (per device) for the evaluation dataloader.",
     )
     parser.add_argument(
@@ -313,64 +313,111 @@ def parse_args():
         ),
     )
 
-    # log 
+     # pruning scheduler
     parser.add_argument(
-        "--log_param_stat_interval",
+        "--initial_sparsity",      
+        type=float,            
+        default=0.0,     
+        help="The initial sparsity of the model."
+    )
+    parser.add_argument(
+        "--final_sparsity",        
+        type=float,            
+        default=0.0,   
+        help="The final sparsity of the model."
+    )
+    parser.add_argument(
+        "--initial_warmup_steps",    
+          type=int,   
+          default=0, 
+          help="The number of training batches/steps for initial warmup."
+    )
+    parser.add_argument(
+        "--sparse_finetune_steps",       
+        type=int,   
+        default=0,     
+        help="The number of training batches/steps for sparse finetuning."
+    )
+    parser.add_argument(
+        "--pruning_interval",             
+        type=int,   
+        default=10,    
+        help="The number of training steps between two pruning operations."
+    )
+
+    # MWA
+    parser.add_argument(
+        "--clipping_threshold",
+        type=float,
+        default=None,
+        help="The gradient clipping threshold for the MWA."
+    )
+    parser.add_argument(
+        "--sigma0",             
+        type=float,            
+        default=1e-15, 
+        help="The base value of the sigma0."
+    )
+    parser.add_argument(
+        "--sigma1",             
+        type=float,            
+        default=0.1,   
+        help="The base value of the sigma1."
+    )
+    
+    parser.add_argument(
+        "--lambda_mix",         
+        type=float,            
+        default=1e-1,  
+        help="The base value of the lambda_mix."
+    )
+    parser.add_argument(
+        "--alpha_i_lambda_mix",
+        type=float,
+        default=1.0,
+        help="The initial factor value of the lambda_mix."
+    )
+    parser.add_argument(
+        "--alpha_f_lambda_mix",     
+        type=float,            
+        default=1.0,   
+        help="The final factor value of the lambda_mix."
+    )
+    parser.add_argument(
+        "--anneal_start_lambda_mix",
         type=int,
         default=None,
-        help="Interval to log the parameter statistics."
+        help="The start step to anneal the lambda_mix."
     )
     parser.add_argument(
-        "--wandb_project_name",
-        type=str,
-        default="squad_bert",
-        help="The name of the wandb project."
+        "--anneal_end_lambda_mix",
+        type=int,
+        default=None,
+        help="The end step to anneal the lambda_mix."
     )
 
-    # cubic pruning scheduler
-    parser.add_argument("--final_ratio",        type=float, default=0.1,   help="The final ratio of the remaining weights.")
-    parser.add_argument("--initial_ratio",      type=float, default=1.0,   help="The initial ratio of the remaining weights.")
-    parser.add_argument("--initial_warmup",     type=int,   default=1,     help="The number of training batches/steps for initial warmup.")
-    parser.add_argument("--final_warmup",       type=int,   default=0,     help="The number of training batches/steps for final warmup.")
-    parser.add_argument("--deltaT",             type=int,   default=10,    help="The interval to mask weights.")
-
-    # BReg
-    parser.add_argument("--sigma0",             type=float, default=1e-13, help="The smaller variance of the Mixture Gaussian prior.")
-    parser.add_argument("--alpha_i_sigma0",     type=float, default=1.0,   help="The initial factor value of the sigma0.")
-    parser.add_argument("--alpha_f_sigma0",     type=float, default=1.0,   help="The final factor value of the sigma0.")
-
-    parser.add_argument("--sigma1",             type=float, default=0.05,  help="The larger variance of the Mixture Gaussian prior.")
-    parser.add_argument("--alpha_i_sigma1",     type=float, default=1.0,   help="The initial factor value of the sigma1.")
-    parser.add_argument("--alpha_f_sigma1",     type=float, default=1.0,   help="The final factor value of the sigma1.")
-    
-    parser.add_argument("--lambda_mix",         type=float, default=1e-3,  help="The mixing coefficient of the Mixture Gaussian prior.")
-    parser.add_argument("--alpha_i_lambda",     type=float, default=1.0,   help="The initial factor value of the lambda_mix.")
-    parser.add_argument("--alpha_f_lambda",     type=float, default=0.01,  help="The final factor value of the lambda_mix.")
-
-    parser.add_argument("--anneal_start",       type=int,   default=None,  help="The number of traing batches/steps for lambda_mix annealing to start.")
-    parser.add_argument("--anneal_end",         type=int,   default=None,  help="The number of traing batches/steps for lambda_mix annealing to end.")
-
-    parser.add_argument("--deltaT_cooldown",    type=int,   default=10,    help="The interval to mask weights.")
-    parser.add_argument("--sparse_fine_tune",   type=int,   default=0,     help="The number of training batches/steps for sparse fine-tuning.")
-
-    parser.add_argument("--masking_value",      type=float, default=0.0,   help="The filling value of the masked weights.")
-    parser.add_argument('--non_prior_name',
-                        type=str,
-                        default=None,
-                        nargs='+',
-                        help="The names of the modules that should not be penalized by the prior, if any. We will match the names using regex.")
+    # logging interval for GBReg
     parser.add_argument(
-        '--init_prior_in_cooldown',
-        action='store_true',
-        help="If passed, will use the initial prior setting during the cubic prune cooldown period."
+        "--log_interval",
+        type=int,
+        default=None,
+        help="Interval to log all research-related information."
     )
 
+    # pruning configurations
     parser.add_argument(
-        '--non_mask_name', 
-        nargs='+',
+        '--pruning_params', 
+        nargs='+', 
         type=str, 
-        default=["layernorm", "classifier", "pooler", "embedding", "bias", "prediction"],
-        help="The names of the modules that should not be pruned. We will match the names using regex."
+        default=[ 
+            "layer.*.attention.self.query.weight",
+            "layer.*.attention.self.key.weight",
+            "layer.*.attention.self.value.weight",
+            "layer.*.attention.output.dense.weight",
+            "layer.*.intermediate.dense.weight",
+            "layer.*.output.dense.weight",
+        ],
+        help="The names of the modules that should be pruned. We will match the names using regex."
     )
 
     args = parser.parse_args()
@@ -874,48 +921,35 @@ def main():
         experiment_config = vars(args)
         # TensorBoard cannot log Enums, need the raw value
         experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
-        #############################
-        #                           #
-        #      Flexible tracker     #
-        #                           #
-        #############################
+        ######################
+        #  Flexible tracker  #
+        ######################
         accelerator.init_trackers(project_name=args.wandb_project_name,
                                   config=experiment_config,
                                  )
 
 
-    ################################
-    #                              #
-    #   Step 1: Init the pruner    #
-    #                              #
-    ################################
-    pruner = BReg(
+    #####################
+    #  Init the pruner  #
+    #####################
+    pruner = MWA(
         train_size=len(train_dataset), 
         max_train_steps=args.max_train_steps,
         sigma0=args.sigma0,
-        alpha_i_sigma0=args.alpha_i_sigma0,
-        alpha_f_sigma0=args.alpha_f_sigma0,
         sigma1=args.sigma1,
-        alpha_i_sigma1=args.alpha_i_sigma1,
-        alpha_f_sigma1=args.alpha_f_sigma1,
         lambda_mix=args.lambda_mix,
-        alpha_i_lambda=args.alpha_i_lambda, 
-        alpha_f_lambda=args.alpha_f_lambda,
-        anneal_start=args.anneal_start, 
-        anneal_end=args.anneal_end,
-        final_ratio=args.final_ratio, 
-        initial_ratio=args.initial_ratio,
-        initial_warmup=args.initial_warmup, 
-        final_warmup=args.final_warmup, 
-        deltaT=args.deltaT,
-        deltaT_cooldown=args.deltaT_cooldown,
-        sparse_fine_tune=args.sparse_fine_tune,
-        masking_value=args.masking_value, 
-        non_mask_name=args.non_mask_name, 
-        non_prior_name=args.non_prior_name,
-        clipping_threshold=None,
-        init_prior_in_cooldown=args.init_prior_in_cooldown,
-        log_param_stat_interval=args.log_param_stat_interval,
+        alpha_i_lambda_mix=args.alpha_i_lambda_mix, 
+        alpha_f_lambda_mix=args.alpha_f_lambda_mix,
+        anneal_start_mix=args.anneal_start_mix, 
+        anneal_end_mix=args.anneal_end_mix,
+        initial_sparsity=args.initial_sparsity,
+        final_sparsity=args.final_sparsity,
+        initial_warmup_steps=args.initial_warmup_steps,
+        sparse_finetune_steps=args.sparse_finetune_steps,
+        pruning_interval=args.pruning_interval,
+        log_interval=args.log_interval,
+        pruning_params=args.pruning_params,
+        clipping_threshold=args.clipping_threshold,
     )
     pruner.print_pruning_modules(model)
 
@@ -948,11 +982,9 @@ def main():
             checkpoint_path = path
             path = os.path.basename(checkpoint_path)
 
-        ############################
-        #                          #
-        #      Fixed some bugs     #
-        #                          #
-        ############################
+        #####################
+        #  Fixed some bugs  #
+        #####################
         accelerator.print(f"Resumed from checkpoint: {checkpoint_path}")
         accelerator.load_state(checkpoint_path)
         # Extract `epoch_{i}` or `step_{i}`
@@ -972,6 +1004,31 @@ def main():
     # update the progress_bar if load from checkpoint
     progress_bar.update(completed_steps)
 
+    ###############
+    #  Logging #1 #
+    ###############
+    pruner.print_pruning_modules(model)
+    if (args.with_tracking and
+        completed_steps == 0):
+        remaining_candidate_magnitude_stat = pruner.get_magnitude_stat(model, which="remaining_candidate")
+        remaining_non_candidate_magnitude_stat = pruner.get_magnitude_stat(model, which="remaining_non_candidate")
+        accelerator.log({
+            "model/remaining_candidate_magnitude_avg": float(remaining_candidate_magnitude_stat["model/magnitude_avg"]),
+            "model/remaining_candidate_magnitude_std": float(remaining_candidate_magnitude_stat["model/magnitude_std"]),
+            "model/remaining_non_candidate_magnitude_avg": float(remaining_non_candidate_magnitude_stat["model/magnitude_avg"]),
+            "model/remaining_non_candidate_magnitude_std": float(remaining_non_candidate_magnitude_stat["model/magnitude_std"])},
+            step=completed_steps,
+        )
+
+    ##################################################################################
+    #  Generated the final fixed mask in case resuming training after pruning ended  #
+    ##################################################################################
+    if (completed_steps > pruner.pruning_end and
+        pruner.final_fixed_mask is None):
+        print ("Generate the final fixed mask first...")
+        _, mask = pruner.prune_with_threshold(model, pruner.final_sparsity)
+        pruner.final_fixed_mask = mask
+
     for epoch in range(starting_epoch, args.num_train_epochs):
         model.train()
         if args.with_tracking:
@@ -990,48 +1047,86 @@ def main():
                     total_loss += loss.detach().float()
 
                 accelerator.backward(loss)
-                ###########################################################
-                #                                                         #
-                #   Step 2: Gradually anneal the prior during training    #
-                #                                                         #
-                ###########################################################
-                if completed_steps <= pruner.cubic_prune_end:
-                    prior_threshold, sigma0, sigma1, lambda_mix = pruner.add_prior_grad(model, completed_steps)
+
+                #########################
+                #  Add prior gradients  # 
+                #########################
+                if completed_steps <= pruner.pruning_end:
+                    prior_threshold, sigma0, sigma1, lambda_mix = pruner.apply_prior_grad(model, completed_steps)
+                    ################
+                    #  Logging #2  # 
+                    ################
                     if args.with_tracking:
                         accelerator.log(
-                            {
-                                "sigma0": float(sigma0),
-                                "sigma1": float(sigma1),
-                                "lambda_mix": float(lambda_mix),
-                                "prior_threshold": float(prior_threshold)
-                            },
+                            {"prior/sigma0": float(sigma0),
+                             "prior/sigma1": float(sigma1),
+                             "prior/lambda_mix": float(lambda_mix),
+                             "prior/prior_threshold": float(prior_threshold)},
                             step=completed_steps,
                         )
+                    pruner.current_prior_threshold = prior_threshold
+
+                #######################
+                #  Gradient clipping  # 
+                #######################
+                if (pruner.clipping_threshold is not None and
+                    pruner.final_fixed_mask is not None and
+                    completed_steps > pruner.pruning_end):
+                    pruner.masked_gradient_clipping(model, pruner.final_fixed_mask)
+
                 optimizer.step()
-                ######################################################
-                #                                                    #
-                #    Step 3: prune with the cubic prune scheduler    #                                
-                #                                                    #
-                ######################################################
-                if pruner.log_param_stat_interval is not None and completed_steps % pruner.log_param_stat_interval == 0:
-                    stats = pruner.param_dist_stats(model)
-                    if args.with_tracking:
-                        accelerator.log(stats, step=completed_steps)
-                ratio, mask_threshold = pruner.magnitude_pruning(model, completed_steps)
+
+                ################
+                #  Logging #3  # 
+                ################
+                if (pruner.log_interval is not None and
+                    args.with_tracking and
+                    completed_steps > pruner.pruning_start and
+                    completed_steps <= pruner.pruning_end and
+                    completed_steps % pruner.log_interval == 0):
+                    n_param_below_prior_threshold, in_spike_mask = pruner.count_param_below_prior_threshold(model, pruner.urrent_prior_threshold)
+                    accelerator.log(
+                        {"pruning/percent_remained_in_spike": float(n_param_below_prior_threshold/pruner.n_total_param_for_pruning)},
+                        step=completed_steps,
+                    )
+                    
+                #########################################################
+                #  Prune the model based on the current sparsity level  #                                
+                #########################################################
+                sparsity, mask_threshold, mask = pruner.magnitude_pruning(model, completed_steps)
+                if mask is not None:
+                    pruner.current_sparsity_mask = mask
+
+                ################
+                #  Logging #4  #
+                ################
                 if args.with_tracking:
                     accelerator.log(
-                        {
-                            "remaining_ratio": ratio,
-                        },
+                        {"pruning/sparsity": float(sparsity)},
                         step=completed_steps,
                     )
                     if mask_threshold is not None:
                         accelerator.log(
-                            {
-                                "mask_threshold": mask_threshold,
-                            },
+                            {"pruning/mask_threshold": float(mask_threshold)},
                             step=completed_steps,
                         )
+                
+                ################
+                #  Logging #5  #
+                ################
+                if (pruner.log_interval is not None and
+                    args.with_tracking):
+                    if completed_steps % pruner.log_interval == 0:
+                        remaining_candidate_magnitude_stat = pruner.get_magnitude_stat(model, which="remaining_candidate", mask=mask)
+                        remaining_non_candidate_magnitude_stat = pruner.get_magnitude_stat(model, which="remaining_non_candidate")
+                        accelerator.log({
+                            "model/remaining_candidate_magnitude_avg": float(remaining_candidate_magnitude_stat["model/magnitude_avg"]),
+                            "model/remaining_candidate_magnitude_std": float(remaining_candidate_magnitude_stat["model/magnitude_std"]),
+                            "model/remaining_non_candidate_magnitude_avg": float(remaining_non_candidate_magnitude_stat["model/magnitude_avg"]),
+                            "model/remaining_non_candidate_magnitude_std": float(remaining_non_candidate_magnitude_stat["model/magnitude_std"])},
+                            step=completed_steps,
+                        )
+
                 lr_scheduler.step()
                 optimizer.zero_grad()
 
