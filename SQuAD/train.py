@@ -529,9 +529,9 @@ def main():
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
 
-        ###########################
-        #  Load the dataset here  #
-        ###########################
+        ###################################
+        #  Use cached dataset if possible #
+        ###################################
         raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name, cache_dir="./cache")
 
     else:
