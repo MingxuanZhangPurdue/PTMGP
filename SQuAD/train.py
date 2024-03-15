@@ -1150,6 +1150,15 @@ def main():
                             "model/remaining_non_candidate_magnitude_std": float(remaining_non_candidate_magnitude_stat["model/magnitude_std"])},
                             step=completed_steps,
                         )
+                
+                ################
+                #  Logging #6  #
+                ################
+                if args.with_tracking:
+                    accelerator.log(
+                        {"lr/learning_rate": float(lr_scheduler.get_last_lr()[0])},
+                        step=completed_steps,
+                    )
 
                 lr_scheduler.step()
                 optimizer.zero_grad()
@@ -1234,7 +1243,7 @@ def main():
         model.train()
 
         ################
-        #  Logging #6  #
+        #  Logging #7  #
         ################
         if args.with_tracking:
             accelerator.log(
