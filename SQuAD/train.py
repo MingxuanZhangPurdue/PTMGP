@@ -37,7 +37,11 @@ from datasets import load_dataset
 from huggingface_hub import HfApi
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from utils_qa import postprocess_qa_predictions
+
+#####################
+#  relative import  #
+#####################
+from SQuAD.utils_qa import postprocess_qa_predictions
 
 import transformers
 from transformers import (
