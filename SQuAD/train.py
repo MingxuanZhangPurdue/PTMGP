@@ -1173,6 +1173,57 @@ def main():
                     token=args.hub_token,
                 )
 
+        ################
+        #  Evaluation  #
+        ################
+        logger.info("***** Running Evaluation *****")
+        logger.info(f"  Num examples = {len(eval_dataset)}")
+        logger.info(f"  Batch size = {args.per_device_eval_batch_size}")
+
+        all_start_logits = []
+        all_end_logits = []
+
+        model.eval()
+
+        for step, batch in enumerate(eval_dataloader):
+            with torch.no_grad():
+                outputs = model(**batch)
+                start_logits = outputs.start_logits
+                end_logits = outputs.end_logits
+
+                if not args.pad_to_max_length:  # necessary to pad predictions and labels for being gathered
+                    start_logits = accelerator.pad_across_processes(start_logits, dim=1, pad_index=-100)
+                    end_logits = accelerator.pad_across_processes(end_logits, dim=1, pad_index=-100)
+
+                all_start_logits.append(accelerator.gather_for_metrics(start_logits).cpu().numpy())
+                all_end_logits.append(accelerator.gather_for_metrics(end_logits).cpu().numpy())
+
+        max_len = max([x.shape[1] for x in all_start_logits])  # Get the max_length of the tensor
+
+        # concatenate the numpy array
+        start_logits_concat = create_and_fill_np_array(all_start_logits, eval_dataset, max_len)
+        end_logits_concat = create_and_fill_np_array(all_end_logits, eval_dataset, max_len)
+
+        # delete the list of numpy arrays
+        del all_start_logits
+        del all_end_logits
+
+        outputs_numpy = (start_logits_concat, end_logits_concat)
+        prediction = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
+        eval_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)
+        logger.info(f"Evaluation metrics: {eval_metric}")
+
+        model.train()
+
+        ################
+        #  Logging #6  #
+        ################
+        if args.with_tracking:
+            accelerator.log(
+                {"metric/eval": eval_metric},
+                step=completed_steps,
+            )
+
     # Evaluation
     logger.info("***** Running Evaluation *****")
     logger.info(f"  Num examples = {len(eval_dataset)}")
@@ -1210,15 +1261,6 @@ def main():
     prediction = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
     eval_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)
     logger.info(f"Evaluation metrics: {eval_metric}")
-
-    ################
-    #  Logging #6  #
-    ################
-    if args.with_tracking:
-        accelerator.log(
-        {"eval_metric": eval_metric},
-        step=completed_steps,
-        )
 
     # Prediction
     if args.do_predict:
