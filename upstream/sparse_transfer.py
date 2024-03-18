@@ -352,7 +352,6 @@ def main():
     )
 
     pruned_checkpoint = torch.load(args.pruned_checkpoint)["state"]["model"]
-    pruned_mask = generate_mask(pruned_checkpoint, args.sparsity, args.pruned_params)
     model = AutoModelForSequenceClassification.from_pretrained(
         args.model_name_or_path,
         config=config,
@@ -361,6 +360,7 @@ def main():
         trust_remote_code=args.trust_remote_code,
         state_dict = pruned_checkpoint
     )
+    pruned_mask = generate_mask(model, args.sparsity, args.pruned_params)
 
     # set the evluation metrics based on the task
     if args.task_name == "stsb":
