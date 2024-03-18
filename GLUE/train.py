@@ -438,12 +438,12 @@ def parse_args():
         nargs='+', 
         type=str, 
         default=[ 
-            "bert.encoder.layer.*.attention.self.query.weight",
-            "bert.encoder.layer.*.attention.self.key.weight",
-            "bert.encoder.layer.*.attention.self.value.weight",
-            "bert.encoder.layer.*.attention.output.dense.weight",
-            "bert.encoder.layer.*.intermediate.dense.weight",
-            "bert.encoder.layer.*.output.dense.weight",
+            "layer.*.attention.self.query.weight",
+            "layer.*.attention.self.key.weight",
+            "layer.*.attention.self.value.weight",
+            "layer.*.attention.output.dense.weight",
+            "layer.*.intermediate.dense.weight",
+            "layer.*.output.dense.weight",
         ],
         help="The names of the modules that should be pruned. We will match the names using regex."
     )

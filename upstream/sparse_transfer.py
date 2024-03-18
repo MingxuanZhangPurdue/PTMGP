@@ -26,8 +26,7 @@ from composer.callbacks import LRMonitor, RuntimeEstimator
 from composer.loggers import WandBLogger
 from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler
 
-from pruners.MWA import MWA
-from pruners.flexible_composer_lr_scheduler import LinearWithRewindsScheduler
+from upstream.pattern_lock import generate_mask, PatternLock
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -347,103 +346,24 @@ def parse_args():
         help="Random seed to use for reproducibility."
     )
 
-    # pruning scheduler
-    parser.add_argument(
-        "--initial_sparsity",      
-        type=float,            
-        default=0.0,     
-        help="The initial sparsity of the model."
-    )
-    parser.add_argument(
-        "--final_sparsity",        
-        type=float,            
-        default=0.0,   
-        help="The final sparsity of the model."
-    )
-    parser.add_argument(
-        "--initial_warmup_steps",    
-          type=str_int_and_none,   
-          default=0, 
-          help="The number of training batches/steps for initial warmup."
-    )
-    parser.add_argument(
-        "--sparse_finetune_steps",       
-        type=str_int_and_none,   
-        default=0,     
-        help="The number of training batches/steps for sparse finetuning."
-    )
-    parser.add_argument(
-        "--pruning_interval",             
-        type=str_int_and_none,   
-        default=10,    
-        help="The number of training steps between two pruning operations."
-    )
-
-    # MWA
-    parser.add_argument(
-        "--sigma0",             
-        type=float,            
-        default=1e-15, 
-        help="The base value of the sigma0."
-    )
-    parser.add_argument(
-        "--sigma1",             
-        type=float,            
-        default=0.1,   
-        help="The base value of the sigma1."
-    )
-    
-    parser.add_argument(
-        "--lambda_mix",         
-        type=float,            
-        default=1e-1,  
-        help="The base value of the lambda_mix."
-    )
-    parser.add_argument(
-        "--alpha_i_lambda_mix",
-        type=float,
-        default=1.0,
-        help="The initial factor value of the lambda_mix."
-    )
-    parser.add_argument(
-        "--alpha_f_lambda_mix",     
-        type=float,            
-        default=1.0,   
-        help="The final factor value of the lambda_mix."
-    )
-    parser.add_argument(
-        "--anneal_start_lambda_mix",
-        type=str_int_and_none,
-        default=None,
-        help="The start step to anneal the lambda_mix."
-    )
-    parser.add_argument(
-        "--anneal_end_lambda_mix",
-        type=str_int_and_none,
-        default=None,
-        help="The end step to anneal the lambda_mix."
-    )
-
-    # logging interval for GBReg
-    parser.add_argument(
-        "--log_interval",
-        type=str_int_and_none,
-        default=None,
-        help="Interval to log all research-related information."
-    )
-
     # pruning configurations
+    parser.add_argument(
+        "--sparsity",   
+        type=float,
+        default=0.9,
+        help="The sparsity level of the pruned model."
+    )
     parser.add_argument(
         '--pruning_params', 
         nargs='+', 
         type=str, 
         default=[ 
-            "bert.encoder.layer.*.attention.self.query.weight",
-            "bert.encoder.layer.*.attention.self.key.weight",
-            "bert.encoder.layer.*.attention.self.value.weight",
-            "bert.encoder.layer.*.attention.output.dense.weight",
-            "bert.encoder.layer.*.intermediate.dense.weight",
-            "bert.encoder.layer.*.output.dense.weight",
+            "layer.*.attention.self.query.weight",
+            "layer.*.attention.self.key.weight",
+            "layer.*.attention.self.value.weight",
+            "layer.*.attention.output.dense.weight",
+            "layer.*.intermediate.dense.weight",
+            "layer.*.output.dense.weight",
         ],
         help="The names of the modules that should be pruned. We will match the names using regex."
     )
@@ -504,8 +424,6 @@ def main():
         metrics = [PearsonCorrCoef(), SpearmanCorrCoef()]
     elif args.task_name == "cola":
         metrics = [MulticlassMatthewsCorrCoef(num_classes=num_labels)]
-    elif args.task_name == "mrpc" or args.task_name == "qqp":
-        metrics = [MulticlassAccuracy(num_classes=num_labels, average='micro'), MulticlassF1Score(num_classes=num_labels, average='micro')]
     else:
         metrics = [MulticlassAccuracy(num_classes=num_labels, average='micro')]
 
