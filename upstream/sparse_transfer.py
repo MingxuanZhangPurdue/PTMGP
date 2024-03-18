@@ -353,7 +353,9 @@ def main():
 
     pruned_checkpoint = torch.load(args.pruned_checkpoint)["state"]["model"]
     for key in list(pruned_checkpoint.keys()):
-        print (key)
+        parts = key.split('.')
+        new_key = '.'.join(parts[1:])
+        pruned_checkpoint[new_key] = pruned_checkpoint.pop(key)
     model = AutoModelForSequenceClassification.from_pretrained(
         args.model_name_or_path,
         config=config,
@@ -362,8 +364,6 @@ def main():
         trust_remote_code=args.trust_remote_code,
         state_dict = pruned_checkpoint
     )
-    for key in list(model.state_dict().keys()):
-        print (key)
     pruned_mask = generate_mask(model, args.sparsity, args.pruned_params)
 
     # set the evluation metrics based on the task
