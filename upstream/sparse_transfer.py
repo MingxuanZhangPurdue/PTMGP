@@ -352,6 +352,8 @@ def main():
     )
 
     pruned_checkpoint = torch.load(args.pruned_checkpoint)["state"]["model"]
+    for key in list(pruned_checkpoint.keys()):
+        print (key)
     model = AutoModelForSequenceClassification.from_pretrained(
         args.model_name_or_path,
         config=config,
