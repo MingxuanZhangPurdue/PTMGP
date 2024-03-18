@@ -1,6 +1,6 @@
 import argparse
 import warnings
-
+import os
 import torch
 from torch.utils.data import DataLoader
 
@@ -135,10 +135,10 @@ def parse_args():
         help="Path to pretrained model or model identifier from huggingface.co/models.",
     )
     parser.add_argument(
-        "--pruned_checkpoint",
+        "--pruned_checkpoint_folder",
         default=None,
         type=str,
-        help="Path to the pruned checkpoint."
+        help="Path to the folder that contains the pruned checkpoint."
     )
 
     # checkpointing
@@ -351,7 +351,7 @@ def main():
         trust_remote_code=args.trust_remote_code,
     )
 
-    pruned_checkpoint = torch.load(args.pruned_checkpoint)["state"]["model"]
+    pruned_checkpoint = torch.load(os.path.join(args.pruned_checkpoint_folder, "latest-rank0.pt"))["state"]["model"]
     for key in list(pruned_checkpoint.keys()):
         parts = key.split('.')
         new_key = '.'.join(parts[1:])
@@ -364,7 +364,10 @@ def main():
         trust_remote_code=args.trust_remote_code,
         state_dict = pruned_checkpoint
     )
-    pruned_mask = generate_mask(model, args.sparsity, args.pruned_params)
+    if os.path.exists(os.path.join(args.pruned_checkpoint_folder, "final_fixed_mask.pt")):
+        pruned_mask = torch.load(os.path.join(args.pruned_checkpoint_folder, "final_fixed_mask.pt"))
+    else:
+        pruned_mask = generate_mask(model, args.sparsity, args.pruned_params)
 
     # set the evluation metrics based on the task
     if args.task_name == "stsb":
