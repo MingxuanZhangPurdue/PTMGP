@@ -19,12 +19,12 @@ from torchmetrics.regression import SpearmanCorrCoef, PearsonCorrCoef
 from composer.utils.dist import get_sampler
 from composer.utils import reproducibility
 from composer.core import Evaluator
-from composer import Time, TimeUnit
 from composer.models.huggingface import HuggingFaceModel
 from composer import Trainer
 from composer.callbacks import LRMonitor, RuntimeEstimator
 from composer.loggers import WandBLogger
 from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler
+from composer.algorithms import GradientClipping
 
 from upstream.pattern_lock import generate_mask, PatternLock
 
@@ -134,6 +134,12 @@ def parse_args():
         type=str,
         help="Path to pretrained model or model identifier from huggingface.co/models.",
     )
+    parser.add_argument(
+        "--pruned_checkpoint",
+        default=None,
+        type=str,
+        help="Path to the pruned checkpoint."
+    )
 
     # checkpointing
     parser.add_argument(
@@ -235,14 +241,7 @@ def parse_args():
         help="Total number of training epochs/batches/steps to perform."
     )
 
-    # lr scheduler type
-    parser.add_argument(
-        "--lr_scheduler",
-        type=str,
-        default="linear_with_warmup",
-        help="The lr scheduler to use.",
-        choices=["linear_with_warmup", "linear_with_rewinds"],
-    )
+
     # linear with warmup lr scheduler specificaions
     parser.add_argument(
         "--t_warmup", 
@@ -261,67 +260,6 @@ def parse_args():
         type=float,
         default=0.0, 
         help="Final learning rate multiplier in the linear with warmup lr scheduler."
-    )
-    # linear with rewinds lr scheduler specificaions
-    parser.add_argument(
-        "--t_iw",
-        type=str,
-        default="2ep",
-        help="Time for the initial warmup in the linear with rewinds lr scheduler."
-    )
-    parser.add_argument(
-        "--t_rewind",
-        type=str,
-        default="6ep",
-        help="Time for each rewind in the linear with rewinds lr scheduler."
-    )
-    parser.add_argument(
-        "--t_fw",
-        type=str,
-        default="2ep",
-        help="Time for the final warmup in the linear with rewinds lr scheduler."
-    )
-    parser.add_argument(
-        "--alpha_i_iw",
-        type=float,
-        default=1.0, 
-        help="Initial learning rate multiplier in the linear with rewinds lr scheduler during inital warmup stage."
-    )
-    parser.add_argument(
-        "--alpha_f_iw",
-        type=float,
-        default=0.0, 
-        help="Final learning rate multiplier in the linear with rewinds lr scheduler during inital warmup stage."
-    )
-    parser.add_argument(
-        "--alpha_i_rewind",
-        type=float,
-        default=1.0, 
-        help="Initial learning rate multiplier in the linear with rewinds lr scheduler during rewind stage."
-    )
-    parser.add_argument(
-        "--alpha_f_rewind",
-        type=float,
-        default=0.0, 
-        help="Final learning rate multiplier in the linear with rewinds lr scheduler during rewind stage."
-    )
-    parser.add_argument(
-        "--alpha_i_fw",
-        type=float,
-        default=1.0, 
-        help="Initial learning rate multiplier in the linear with rewinds lr scheduler during final warmup stage."
-    )
-    parser.add_argument(
-        "--alpha_f_fw",
-        type=float,
-        default=0.0, 
-        help="Final learning rate multiplier in the linear with rewinds lr scheduler during final warmup stage."
-    )
-    parser.add_argument(
-        "--num_rewinds",
-        type=int,
-        default=1,
-        help="Number of rewinds in the linear with rewinds lr scheduler."
     )
 
     # wandb logging
@@ -346,7 +284,7 @@ def parse_args():
         help="Random seed to use for reproducibility."
     )
 
-    # pruning configurations
+    # pruning configurations for pattern lock
     parser.add_argument(
         "--sparsity",   
         type=float,
@@ -354,7 +292,7 @@ def parse_args():
         help="The sparsity level of the pruned model."
     )
     parser.add_argument(
-        '--pruning_params', 
+        '--pruned_params', 
         nargs='+', 
         type=str, 
         default=[ 
@@ -405,18 +343,23 @@ def main():
         cache_dir=args.cache_dir,
         trust_remote_code=args.trust_remote_code,
     )
+
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_name_or_path,
         cache_dir=args.cache_dir,
         use_fast=not args.use_slow_tokenizer,
         trust_remote_code=args.trust_remote_code,
     )
+
+    pruned_checkpoint = torch.load(args.pruned_checkpoint)["state"]["model"]
+    pruned_mask = generate_mask(pruned_checkpoint, args.sparsity, args.pruned_params)
     model = AutoModelForSequenceClassification.from_pretrained(
         args.model_name_or_path,
         config=config,
         cache_dir=args.cache_dir,
         ignore_mismatched_sizes=args.ignore_mismatched_sizes,
         trust_remote_code=args.trust_remote_code,
+        state_dict = pruned_checkpoint
     )
 
     # set the evluation metrics based on the task
@@ -506,27 +449,11 @@ def main():
         eps=1.0e-06, 
         weight_decay=args.weight_decay
     )
-    if args.lr_scheduler == "linear_with_warmup":
-        lr_scheduler = LinearWithWarmupScheduler(
-            t_warmup=args.t_warmup,
-            alpha_i=args.alpha_i,
-            alpha_f=args.alpha_f
-        )
-    elif args.lr_scheduler == "linear_with_rewinds":
-        lr_scheduler = LinearWithRewindsScheduler(
-            t_iw=args.t_iw,
-            t_rewind=args.t_rewind,
-            t_fw=args.t_fw,
-            alpha_i_iw=args.alpha_i_iw,
-            alpha_f_iw=args.alpha_f_iw,
-            alpha_i_rewind=args.alpha_i_rewind,
-            alpha_f_rewind=args.alpha_f_rewind,
-            alpha_i_fw=args.alpha_i_fw,
-            alpha_f_fw=args.alpha_f_fw,
-            num_rewinds=args.num_rewinds
-        )
-    else:
-        raise ValueError(f"Unsupported lr scheduler: {args.lr_scheduler}")
+    lr_scheduler = LinearWithWarmupScheduler(
+        t_warmup=args.t_warmup,
+        alpha_i=args.alpha_i,
+        alpha_f=args.alpha_f
+    )
 
     # initialize the wandb logger
     wandb_logger = WandBLogger(
@@ -535,17 +462,11 @@ def main():
         init_kwargs = {"config": vars(args)}
     )
 
-    # initialize the pruner algorithm
-    train_size = len(train_dataset)
-    train_time = Time.from_timestring(args.max_duration)
-    if train_time.unit == TimeUnit.EPOCH:
-        max_train_steps = len(train_dataloader) * train_time.value
-    elif train_time.unit == TimeUnit.BATCH:
-        max_train_steps = train_time.value
-    else:
-        raise ValueError(f"Unsupported time unit: {train_time.unit}")
-    
-    pruner_algorithm = MWA.from_args(train_size, max_train_steps, len(train_dataloader), args)
+    # initialize the pattern lock algorithm
+    pattern_lock = PatternLock(mask=pruned_mask)
+
+    # initialize gradient clipping algorithm
+    gradient_clipping = GradientClipping(clipping_type="norm", clipping_threshold=args.clipping_threshold)
 
     # initialize the trainer
     trainer = Trainer(
@@ -570,7 +491,7 @@ def main():
         callbacks=[LRMonitor(), RuntimeEstimator()],
 
         # algorithms
-        algorithms=[pruner_algorithm],
+        algorithms=[gradient_clipping, pattern_lock],
 
         # checkpointing
         run_name=args.run_name,
