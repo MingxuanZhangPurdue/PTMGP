@@ -206,7 +206,7 @@ def parse_args():
     parser.add_argument(
         "--clipping_threshold",
         type=float_and_none,
-        default=1.0,
+        default=None,
         help="Gradient clipping threshold."
     )
     parser.add_argument(
@@ -449,9 +449,20 @@ def main():
         )
 
     # optimizer and learning rate scheduler creation
+    no_decay = ["bias", "LayerNorm.weight"]
+    optimizer_grouped_parameters = [
+        {
+            "params": [p for n, p in composer_model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "weight_decay": args.weight_decay,
+        },
+        {
+            "params": [p for n, p in composer_model.named_parameters() if any(nd in n for nd in no_decay)],
+            "weight_decay": 0.0,
+        },
+    ]
     optimizer = DecoupledAdamW(
-        composer_model.parameters(), 
-        lr=args.learning_rate, 
+        optimizer_grouped_parameters, 
+        lr=args.learning_rate,
         betas=[0.9, 0.98], 
         eps=1.0e-06, 
         weight_decay=args.weight_decay
