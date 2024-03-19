@@ -21,17 +21,14 @@ class MWA(Algorithm):
             max_train_steps,
             sigma0=1e-10,
             sigma1=0.05,
-            lambda_mix=1e-1,
+            lambda_mix=1e-2,
             alpha_i_lambda_mix=1.0,
-            alpha_f_lambda_mix=1.0,
-            anneal_start_lambda_mix=None,
-            anneal_end_lambda_mix=None,
+            alpha_f_lambda_mix=0.001,
             initial_sparsity=0.0,
             final_sparsity=0.0,
             initial_warmup_steps=0,
-            pruning_interval=10,
+            pruning_interval=1000,
             pruning_params=None,
-            clipping_threshold=None,
             sparse_finetune_steps=0,
             log_interval=None,
         ):
@@ -44,13 +41,12 @@ class MWA(Algorithm):
         self.final_sparsity = final_sparsity
 
         pruning_start = initial_warmup_steps
-        pruning_end = max_train_steps - sparse_finetune_steps
+        pruning_end = max_train_steps - sparse_finetune_steps - 1
 
-        assert pruning_start < pruning_end <= max_train_steps, (
+        assert 0 <= pruning_start < pruning_end, (
             f"pruning_start: {pruning_start}, "
             f"pruning_end: {pruning_end}, "
-            f"max_train_steps: {max_train_steps}. "
-            "Condition pruning_start < pruning_end <= max_train_steps must be satisfied, but got False"
+            "Condition 0 <= pruning_start < pruning_end must be satisfied, but got False"
         )
 
         self.pruning_start = pruning_start
@@ -65,8 +61,6 @@ class MWA(Algorithm):
         self.current_sparsity_mask = None
 
         self.train_size = train_size
-
-        self.clipping_threshold = clipping_threshold
 
         self.pruning_params = re.compile("|".join(pruning_params), re.IGNORECASE) if pruning_params is not None else None
 
@@ -86,8 +80,6 @@ class MWA(Algorithm):
         self.lambda_mix = lambda_mix
         self.alpha_i_lambda_mix = alpha_i_lambda_mix
         self.alpha_f_lambda_mix = alpha_f_lambda_mix
-        self.anneal_start_lambda_mix = anneal_start_lambda_mix if anneal_start_lambda_mix is not None else pruning_start
-        self.anneal_end_lambda_mix = anneal_end_lambda_mix if anneal_end_lambda_mix is not None else pruning_end
 
     # initialize the algorithm from the command line arguments
     @classmethod
@@ -96,8 +88,6 @@ class MWA(Algorithm):
         sparse_finetune_steps = _convert_timestr_to_int(args.sparse_finetune_steps, max_train_steps, train_dataloader_len)
         pruning_interval = _convert_timestr_to_int(args.pruning_interval, max_train_steps, train_dataloader_len)
         log_interval = _convert_timestr_to_int(args.log_interval, max_train_steps, train_dataloader_len) if args.log_interval is not None else None
-        anneal_start_lambda_mix = _convert_timestr_to_int(args.anneal_start_lambda_mix, max_train_steps, train_dataloader_len) if args.anneal_start_lambda_mix is not None else None
-        anneal_end_lambda_mix = _convert_timestr_to_int(args.anneal_end_lambda_mix, max_train_steps, train_dataloader_len) if args.anneal_end_lambda_mix is not None else None
         return self(
             train_size=train_size,
             max_train_steps=max_train_steps,
@@ -106,14 +96,11 @@ class MWA(Algorithm):
             lambda_mix=args.lambda_mix,
             alpha_i_lambda_mix=args.alpha_i_lambda_mix,
             alpha_f_lambda_mix=args.alpha_f_lambda_mix,
-            anneal_start_lambda_mix=anneal_start_lambda_mix,
-            anneal_end_lambda_mix=anneal_end_lambda_mix,
             initial_sparsity=args.initial_sparsity,
             final_sparsity=args.final_sparsity,
             initial_warmup_steps=initial_warmup_steps,
             pruning_interval=pruning_interval,
             pruning_params=args.pruning_params,
-            clipping_threshold=args.clipping_threshold,
             sparse_finetune_steps=sparse_finetune_steps,
             log_interval=log_interval
         )
@@ -125,14 +112,14 @@ class MWA(Algorithm):
             return bool(re.search(self.pruning_params, n))
         
     def annealing_scheduler(self, train_step_index):
-        if train_step_index < self.anneal_start_lambda_mix:
+        if train_step_index < self.pruning_start:
             alpha = 1.0
-        elif train_step_index == self.anneal_start_lambda_mix:
+        elif train_step_index == self.pruning_start:
             alpha = self.alpha_i_lambda_mix
-        elif self.anneal_start_lambda_mix < train_step_index < self.anneal_end_lambda_mix:
-            frac_of_total = 1 - (train_step_index - self.anneal_start_lambda_mix) / (self.anneal_end_lambda_mix - self.anneal_start_lambda_mix)
+        elif self.pruning_start < train_step_index < self.pruning_end:
+            frac_of_total = 1 - (train_step_index - self.pruning_start) / (self.pruning_end - self.pruning_start)
             alpha = self.alpha_f_lambda_mix + (self.alpha_i_lambda_mix - self.alpha_f_lambda_mix) * frac_of_total
-        elif train_step_index >= self.anneal_end_lambda_mix:
+        elif train_step_index >= self.pruning_end:
             alpha = self.alpha_f_lambda_mix
         else:
             raise ValueError(f"Invalid train_step_index value: {train_step_index}")
@@ -216,20 +203,6 @@ class MWA(Algorithm):
         else:
             raise ValueError(f"Invalid train_step_index value: {train_step_index}")
         return sparsity, pruning_ind
-    
-    def masked_gradient_clipping(self, model, mask):
-        grads = []
-        for n, p in model.named_parameters():
-            if self.whether_prune_param(n):
-                grads.append(p.grad.detach()[~mask[n]].view(-1))
-            else:
-                grads.append(p.grad.detach().view(-1))
-        total_norm = torch.cat(grads).norm(2).item()
-        clip_coef = self.clipping_threshold / (total_norm + 1e-6)
-        clip_coef = min(1, clip_coef)
-        for n, p in model.named_parameters():
-            p.grad.detach().mul_(clip_coef)
-        return total_norm
             
     def prune_with_mask(self, model, mask):
         for n, p in model.named_parameters():
@@ -270,29 +243,6 @@ class MWA(Algorithm):
         magnitude_stat["model/magnitude_avg"] = magnitude_vector.mean().item()
         magnitude_stat["model/magnitude_std"] = magnitude_vector.std().item()
         return magnitude_stat
-    
-    def get_grad_norm(self, model, which, mask=None):
-        grads = []
-        for n, p in model.named_parameters():
-            if which == "remaining_candidate":
-                if self.whether_prune_param(n):
-                    if mask is not None:
-                        grads.append(p.grad.detach()[~mask[n]].view(-1))
-                    else:
-                        grads.append(p.grad.detach().view(-1))
-            elif which == "remaining_non_candidate":
-                if not self.whether_prune_param(n):
-                    grads.append(p.grad.detach().view(-1))
-            elif which == "pruned_candidate":
-                if self.whether_prune_param(n):
-                    if mask is not None:
-                        grads.append(p.grad.detach()[mask[n]].view(-1))
-                    else:
-                        raise ValueError("mask must be provided for the pruned_candidate gradient vector")
-            else:
-                raise ValueError("which must be one of the following: remaining_candidate, remaining_non_candidate, pruned_candidate")
-        grad_norm = torch.cat(grads).norm(2).item()
-        return grad_norm
     
     def print_pruning_modules(self, model):
         print ("List of model modules to be pruned:")
@@ -337,11 +287,6 @@ class MWA(Algorithm):
                     logger.log_metrics({"prior/lambda_mix": float(lambda_mix)})
                     logger.log_metrics({"prior/prior_threshold": float(prior_threshold)})
                 self.current_prior_threshold = prior_threshold
-            # perform gradient clipping
-            if (self.clipping_threshold is not None and
-                self.final_fixed_mask is not None and
-                train_step_index > self.pruning_end):
-                self.masked_gradient_clipping(state.model, self.final_fixed_mask)
         elif event == Event.BATCH_END:
             train_step_index = state.timestamp.batch.value - 1
             # log the count of parameters remaining in the high-penalty region (spike) from the last pruning step right before the next pruning step
@@ -394,16 +339,3 @@ class MWA(Algorithm):
                     pruned_candidate_magnitude_stat = self.get_magnitude_stat(state.model, which="pruned_candidate", mask=self.current_sparsity_mask)
                     logger.log_metrics({"model/pruned_candidate_magnitude_avg": float(pruned_candidate_magnitude_stat["model/magnitude_avg"]),
                                         "model/pruned_candidate_magnitude_std": float(pruned_candidate_magnitude_stat["model/magnitude_std"])})
-            # log the parameter's gradient norm during training
-            if (self.log_interval is not None and
-                logger is not None and 
-                train_step_index % self.log_interval == 0):
-                remaining_candidate_grad_norm = self.get_grad_norm(state.model, which="remaining_candidate", mask=mask)
-                remaining_non_candidate_grad_norm = self.get_grad_norm(state.model, which="remaining_non_candidate")
-                total_remaining_grad_norm = (remaining_candidate_grad_norm**2 + remaining_non_candidate_grad_norm**2)**0.5
-                logger.log_metrics({"gradient/remaining_candidate_grad_norm": float(remaining_candidate_grad_norm)})
-                logger.log_metrics({"gradient/remaining_non_candidate_grad_norm": float(remaining_non_candidate_grad_norm)})
-                logger.log_metrics({"gradient/total_remaining_grad_norm": float(total_remaining_grad_norm)})
-                if mask is not None:
-                    pruned_candidate_grad_norm = self.get_grad_norm(state.model, which="pruned_candidate", mask=mask)
-                    logger.log_metrics({"gradient/pruned_candidate_grad_norm": float(pruned_candidate_grad_norm)})

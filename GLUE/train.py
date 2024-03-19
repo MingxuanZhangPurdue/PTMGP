@@ -13,7 +13,7 @@ from transformers import (
     default_data_collator,
 )
 
-from torchmetrics.classification import MulticlassAccuracy, MulticlassMatthewsCorrCoef, MulticlassF1Score
+from torchmetrics.classification import MulticlassAccuracy, MulticlassMatthewsCorrCoef
 from torchmetrics.regression import SpearmanCorrCoef, PearsonCorrCoef
 
 from composer.utils.dist import get_sampler
@@ -198,12 +198,6 @@ def parse_args():
     )
 
     # training setups
-    parser.add_argument(
-        "--clipping_threshold",
-        type=float_and_none,
-        default=1.0,
-        help="Gradient clipping threshold."
-    )
     parser.add_argument(
         "--precision",
         type=str,
@@ -392,7 +386,6 @@ def parse_args():
         default=0.1,   
         help="The base value of the sigma1."
     )
-    
     parser.add_argument(
         "--lambda_mix",         
         type=float,            
@@ -410,18 +403,6 @@ def parse_args():
         type=float,            
         default=1.0,   
         help="The final factor value of the lambda_mix."
-    )
-    parser.add_argument(
-        "--anneal_start_lambda_mix",
-        type=str_int_and_none,
-        default=None,
-        help="The start step to anneal the lambda_mix."
-    )
-    parser.add_argument(
-        "--anneal_end_lambda_mix",
-        type=str_int_and_none,
-        default=None,
-        help="The end step to anneal the lambda_mix."
     )
 
     # logging interval for GBReg
@@ -445,7 +426,7 @@ def parse_args():
             "layer.*.intermediate.dense.weight",
             "layer.*.output.dense.weight",
         ],
-        help="The names of the modules that should be pruned. We will match the names using regex."
+        help="The names of the modules that should be pruned. We will match the names using regex. The default value is for BERT."
     )
 
     args = parser.parse_args()
