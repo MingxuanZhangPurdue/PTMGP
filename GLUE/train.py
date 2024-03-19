@@ -67,7 +67,7 @@ def float_and_none(value):
             raise ValueError(f"Unsupported value type {value}")
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Finetune and prune a transformers model on a glue task.")
+    parser = argparse.ArgumentParser(description="Prune and finetune a transformers model on a glue task.")
     
     # required arguments
     parser.add_argument(
@@ -145,14 +145,14 @@ def parse_args():
     )
     parser.add_argument(
         "--save_folder", 
-        type=str, 
+        type=str,
         default=None, 
         help="Folder to save the checkpoints."
     )
     parser.add_argument(
         "--save_interval",  
-        type=str, 
-        default="1ep", 
+        type=str,
+        default="1ep",
         help="Interval to save the checkpoints."
     )
     parser.add_argument(
@@ -186,7 +186,7 @@ def parse_args():
     # evaluation
     parser.add_argument(
         "--eval_interval", 
-        type=str_int_and_none, 
+        type=str_int_and_none,
         default="1ep",
         help="Interval to evaluate the model."
     )
@@ -225,7 +225,7 @@ def parse_args():
     )
     parser.add_argument(
         "--max_duration", 
-        type=str,   
+        type=str,
         default="10ep",
         help="Total number of training epochs/batches/steps to perform."
     )
@@ -248,7 +248,7 @@ def parse_args():
     parser.add_argument(
         "--alpha_i",
         type=float,
-        default=1.0, 
+        default=1.0,
         help="Initial learning rate multiplier in the linear with warmup lr scheduler."
     )
     parser.add_argument(
@@ -330,7 +330,7 @@ def parse_args():
         "--wandb_run_name", 
         type=str, 
         default=None, 
-        help="The wandb run name."
+        help="The wandb run name, if not the same as the run name."
     )
     
     # reproducibility
@@ -442,6 +442,23 @@ def main():
     # reproducibility
     reproducibility.seed_all(args.seed)
 
+    # device setup
+    if not torch.cuda.is_available():
+        warnings.warn("No GPU available. The training will be performed on CPU.")
+        device = "cpu"
+        if args.precision != "fp32":
+            warnings.warn("Mixed precision is not available on CPU. The precision will be set to fp32.")
+            args.precision = "fp32"
+    else:
+        device = "gpu"
+
+    # initialize the wandb logger
+    wandb_logger = WandBLogger(
+        project=args.wandb_project_name,
+        name=args.wandb_run_name,
+        init_kwargs = {"config": vars(args)}
+    )
+
     # load the raw datasets
     raw_datasets = load_dataset(
         "glue",
@@ -494,7 +511,6 @@ def main():
     # preprocess the raw datasets
     sentence1_key, sentence2_key = task_to_keys[args.task_name]
 
-    # padding strategy
     padding = "max_length" if args.pad_to_max_length else False
 
     if args.max_seq_length > tokenizer.model_max_length:
@@ -564,7 +580,7 @@ def main():
         composer_model.parameters(), 
         lr=args.learning_rate, 
         betas=[0.9, 0.98], 
-        eps=1.0e-06, 
+        eps=1.0e-06,
         weight_decay=args.weight_decay
     )
     if args.lr_scheduler == "linear_with_warmup":
@@ -589,13 +605,6 @@ def main():
     else:
         raise ValueError(f"Unsupported lr scheduler: {args.lr_scheduler}")
 
-    # initialize the wandb logger
-    wandb_logger = WandBLogger(
-        project=args.wandb_project_name,
-        name=args.wandb_run_name,
-        init_kwargs = {"config": vars(args)}
-    )
-
     # initialize the pruner algorithm
     train_size = len(train_dataset)
     train_time = Time.from_timestring(args.max_duration)
@@ -616,7 +625,7 @@ def main():
         optimizers=optimizer,
         max_duration=args.max_duration,
         device_train_microbatch_size='auto',
-        device='gpu' if torch.cuda.is_available() else 'cpu',
+        device=device,
         precision=args.precision,
         schedulers=lr_scheduler,
 
