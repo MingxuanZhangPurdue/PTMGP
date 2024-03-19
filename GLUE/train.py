@@ -13,8 +13,7 @@ from transformers import (
     default_data_collator,
 )
 
-from torchmetrics.classification import MulticlassAccuracy, MulticlassMatthewsCorrCoef
-from torchmetrics.regression import SpearmanCorrCoef, PearsonCorrCoef
+from torchmetrics.classification import MulticlassAccuracy
 
 from composer.utils.dist import get_sampler
 from composer.utils import reproducibility
@@ -30,15 +29,10 @@ from pruners.MWA import MWA
 from pruners.flexible_composer_lr_scheduler import LinearWithRewindsScheduler
 
 task_to_keys = {
-    "cola": ("sentence", None),
     "mnli": ("premise", "hypothesis"),
-    "mrpc": ("sentence1", "sentence2"),
     "qnli": ("question", "sentence"),
     "qqp":  ("question1", "question2"),
-    "rte":  ("sentence1", "sentence2"),
     "sst2": ("sentence", None),
-    "stsb": ("sentence1", "sentence2"),
-    "wnli": ("sentence1", "sentence2"),
 }
 
 # add whether to use fixed mask during finla warmup
@@ -468,12 +462,8 @@ def main():
     )
     
     # determine the number of labels
-    is_regression = args.task_name == "stsb"
-    if not is_regression:
-        label_list = raw_datasets["train"].features["label"].names
-        num_labels = len(label_list)
-    else:
-        num_labels = 1
+    label_list = raw_datasets["train"].features["label"].names
+    num_labels = len(label_list)
 
     # load the model and tokenizer
     config = AutoConfig.from_pretrained(
@@ -498,12 +488,7 @@ def main():
     )
 
     # set the evluation metrics based on the task
-    if args.task_name == "stsb":
-        metrics = [PearsonCorrCoef(), SpearmanCorrCoef()]
-    elif args.task_name == "cola":
-        metrics = [MulticlassMatthewsCorrCoef(num_classes=num_labels)]
-    else:
-        metrics = [MulticlassAccuracy(num_classes=num_labels, average='micro')]
+    metrics = [MulticlassAccuracy(num_classes=num_labels, average='micro')]
 
     # wrap the model 
     composer_model = HuggingFaceModel(model, tokenizer=tokenizer, metrics=metrics, use_logits=True)
