@@ -21,7 +21,7 @@ class MWA(Algorithm):
             max_train_steps,
             sigma0=1e-10,
             sigma1=0.05,
-            lambda_mix=1e-2,
+            lambda_mix=1e-1,
             alpha_i_lambda_mix=1.0,
             alpha_f_lambda_mix=0.001,
             initial_sparsity=0.0,
