@@ -172,6 +172,7 @@ class MWA(Algorithm):
         sparsity, pruning_ind = self.sparsity_scheduler(train_step_index)
         if pruning_ind and sparsity > 0.0:
             if train_step_index == self.pruning_end:
+                print ("Gradual pruning stage is over. Generate the final fixed mask...")
                 mask_threshold, mask = self.prune_with_threshold(model, sparsity)
                 self.final_fixed_mask = mask
             elif train_step_index > self.pruning_end:
