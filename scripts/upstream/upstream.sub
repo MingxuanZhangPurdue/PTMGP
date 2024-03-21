@@ -4,7 +4,7 @@ module purge
 module load anaconda
 conda activate testenv
 
-seed=42
+seed=47
 sparsity=0.9
 
 composer -m -n 4 upstream.train \
