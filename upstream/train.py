@@ -526,7 +526,7 @@ def main():
         train_dataloader=train_dataloader,
         optimizers=optimizer,
         max_duration=args.max_duration,
-        device_train_microbatch_size=args.train_microbatch_size,
+        device_train_microbatch_size=args.per_device_train_microbatch_size,
         device='gpu' if torch.cuda.is_available() else 'cpu',
         precision=args.precision,
         schedulers=lr_scheduler,
