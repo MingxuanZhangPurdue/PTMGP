@@ -184,12 +184,6 @@ def parse_args():
         help="The micro-batch size to use for training.",
     )
     parser.add_argument(
-        "--clipping_threshold",
-        type=float_and_none,
-        default=None,
-        help="Gradient clipping threshold."
-    )
-    parser.add_argument(
         "--precision",
         type=str,
         default=None,
@@ -205,7 +199,7 @@ def parse_args():
     parser.add_argument(
         "--learning_rate",
         type=float,
-        default=1e-4,
+        default=3e-4,
         help="Initial learning rate (after the potential warmup period) to use.",
     )
     parser.add_argument(
@@ -217,7 +211,7 @@ def parse_args():
     parser.add_argument(
         "--max_duration", 
         type=str,   
-        default="3ep",
+        default="4ep",
         help="Total number of training epochs/batches/steps to perform."
     )
     parser.add_argument(
@@ -380,18 +374,6 @@ def parse_args():
         default=1.0,   
         help="The final factor value of the lambda_mix."
     )
-    parser.add_argument(
-        "--anneal_start_lambda_mix",
-        type=str_int_and_none,
-        default=None,
-        help="The start step to anneal the lambda_mix."
-    )
-    parser.add_argument(
-        "--anneal_end_lambda_mix",
-        type=str_int_and_none,
-        default=None,
-        help="The end step to anneal the lambda_mix."
-    )
 
     # logging interval for GBReg
     parser.add_argument(
@@ -407,14 +389,14 @@ def parse_args():
         nargs='+', 
         type=str, 
         default=[ 
-            "bert.encoder.layer.*.attention.self.query.weight",
-            "bert.encoder.layer.*.attention.self.key.weight",
-            "bert.encoder.layer.*.attention.self.value.weight",
-            "bert.encoder.layer.*.attention.output.dense.weight",
-            "bert.encoder.layer.*.intermediate.dense.weight",
-            "bert.encoder.layer.*.output.dense.weight",
+            "layer.*.attention.self.query.weight",
+            "layer.*.attention.self.key.weight",
+            "layer.*.attention.self.value.weight",
+            "layer.*.attention.output.dense.weight",
+            "layer.*.intermediate.dense.weight",
+            "layer.*.output.dense.weight",
         ],
-        help="The names of the modules that should be pruned. We will match the names using regex."
+        help="The names of the modules that should be pruned. We will match the names using regex. The default value is for BERT."
     )
 
     args = parser.parse_args()
