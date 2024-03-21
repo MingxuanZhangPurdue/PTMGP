@@ -324,6 +324,18 @@ def parse_args():
     #  Pruner arguments  #
     ######################
     parser.add_argument(
+        "--wandb_project_name",
+        type=str,
+        default="SQuAD",
+        help="The name of the wandb project."
+    )
+    parser.add_argument(
+        "--wandb_run_name",
+        type=str,
+        default=None,
+        help="The name of the wandb run."
+    )
+    parser.add_argument(
         "--alpha_f",
         type=float,
         default=0.1,
@@ -356,25 +368,19 @@ def parse_args():
     parser.add_argument(
         "--pruning_interval",             
         type=int,   
-        default=10,    
+        default=500,    
         help="The number of training steps between two pruning operations."
-    )
-    parser.add_argument(
-        "--clipping_threshold",
-        type=float,
-        default=None,
-        help="The gradient clipping threshold for the MWA."
     )
     parser.add_argument(
         "--sigma0",             
         type=float,            
-        default=1e-15, 
+        default=1e-10, 
         help="The base value of the sigma0."
     )
     parser.add_argument(
         "--sigma1",             
         type=float,            
-        default=0.1,   
+        default=0.05,   
         help="The base value of the sigma1."
     )
     
@@ -393,20 +399,8 @@ def parse_args():
     parser.add_argument(
         "--alpha_f_lambda_mix",     
         type=float,            
-        default=1.0,   
+        default=0.001,   
         help="The final factor value of the lambda_mix."
-    )
-    parser.add_argument(
-        "--anneal_start_lambda_mix",
-        type=int,
-        default=None,
-        help="The start step to anneal the lambda_mix."
-    )
-    parser.add_argument(
-        "--anneal_end_lambda_mix",
-        type=int,
-        default=None,
-        help="The end step to anneal the lambda_mix."
     )
     parser.add_argument(
         "--log_interval",
@@ -911,16 +905,6 @@ def main():
         end_factor=args.alpha_f,
         total_iters=args.max_train_steps,
     )
-    """
-    lr_scheduler = get_scheduler(
-        name=args.lr_scheduler_type,
-        optimizer=optimizer,
-        num_warmup_steps=args.num_warmup_steps * accelerator.num_processes,
-        num_training_steps=args.max_train_steps
-        if overrode_max_train_steps
-        else args.max_train_steps * accelerator.num_processes,
-    )
-    """
 
     # Prepare everything with our `accelerator`.
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
@@ -950,8 +934,9 @@ def main():
         #  Specify run and project name  #
         ##################################
         accelerator.init_trackers(
-            "SQuAD", 
+            args.wandb_project_name, 
             experiment_config,
+            {"run_name": args.wandb_run_name}
         )
 
     #####################
@@ -965,8 +950,6 @@ def main():
         lambda_mix=args.lambda_mix,
         alpha_i_lambda_mix=args.alpha_i_lambda_mix, 
         alpha_f_lambda_mix=args.alpha_f_lambda_mix,
-        anneal_start_lambda_mix=args.anneal_start_lambda_mix, 
-        anneal_end_lambda_mix=args.anneal_end_lambda_mix,
         initial_sparsity=args.initial_sparsity,
         final_sparsity=args.final_sparsity,
         initial_warmup_steps=args.initial_warmup_steps,
@@ -974,7 +957,6 @@ def main():
         pruning_interval=args.pruning_interval,
         log_interval=args.log_interval,
         pruning_params=args.pruning_params,
-        clipping_threshold=args.clipping_threshold,
     )
 
     # Train!
@@ -1090,14 +1072,6 @@ def main():
                         )
                     pruner.current_prior_threshold = prior_threshold
 
-                #######################
-                #  Gradient clipping  # 
-                #######################
-                if (pruner.clipping_threshold is not None and
-                    pruner.final_fixed_mask is not None and
-                    completed_steps > pruner.pruning_end):
-                    pruner.masked_gradient_clipping(model, pruner.final_fixed_mask)
-
                 optimizer.step()
 
                 ################
@@ -1108,7 +1082,7 @@ def main():
                     completed_steps > pruner.pruning_start and
                     completed_steps <= pruner.pruning_end and
                     completed_steps % pruner.log_interval == 0):
-                    n_param_below_prior_threshold, in_spike_mask = pruner.count_param_below_prior_threshold(model, pruner.current_prior_threshold)
+                    n_param_below_prior_threshold, _ = pruner.count_param_below_prior_threshold(model, pruner.current_prior_threshold)
                     accelerator.log(
                         {"pruning/percent_remained_in_spike": float(n_param_below_prior_threshold/pruner.n_total_param_for_pruning)},
                         step=completed_steps,
