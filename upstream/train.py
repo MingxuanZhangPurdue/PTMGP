@@ -178,10 +178,10 @@ def parse_args():
 
     # training arguments
     parser.add_argument(
-        "--train_microbatch_size",
+        "--per_device_train_microbatch_size",
         type=str_int_and_none,
         default="auto",
-        help="The micro-batch size to use for training.",
+        help="The micro-batch size to use for training (per device).",
     )
     parser.add_argument(
         "--precision",
