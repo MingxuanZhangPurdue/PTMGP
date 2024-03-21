@@ -28,7 +28,7 @@ composer -m -n 4 upstream.train \
   --alpha_f_lambda_mix 0.001 \
   --initial_warmup_steps 2ep \
   --sparse_finetune_steps 0ep \
-  --pruning_interval 500 \
+  --pruning_interval 200 \
   --seed ${seed} \
   --initial_sparsity 0.3 \
   --final_sparsity ${sparsity} \
