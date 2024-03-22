@@ -21,6 +21,7 @@ class PLATON(Algorithm):
         assert final_sparsity < 1.0 and final_sparsity >= 0.0, "final_sparsity must be in the range [0, 1)"
         assert initial_sparsity <= final_sparsity, "initial_sparsity must be less than or equal to final_sparsity"  
         
+        self.n_total_param_for_pruning = 0
         self.ipt = {}
         self.exp_avg_ipt = {}
         self.exp_avg_unc = {}
