@@ -24,8 +24,10 @@ from composer import Trainer
 from composer.callbacks import LRMonitor, RuntimeEstimator
 from composer.loggers import WandBLogger
 from composer.optim import DecoupledAdamW, LinearWithWarmupScheduler
+from composer.algorithms import GradientClipping
 
 from pruners.MWA import MWA
+from pruners.PLATON import PLATON
 from pruners.flexible_composer_lr_scheduler import LinearWithRewindsScheduler
 
 task_to_keys = {
@@ -399,7 +401,7 @@ def parse_args():
         help="The final factor value of the lambda_mix."
     )
 
-    # logging interval for GBReg
+    # logging interval for research
     parser.add_argument(
         "--log_interval",
         type=str_int_and_none,
@@ -407,7 +409,28 @@ def parse_args():
         help="Interval to log all research-related information."
     )
 
+    # PLATON
+    parser.add_argument(
+        "--beta1",
+        type=float,
+        default=0.85,
+        help="The beta1 value for the PLATON algorithm."
+    )
+    parser.add_argument(
+        "--beta2",
+        type=float,
+        default=0.85,
+        help="The beta2 value for the PLATON algorithm."
+    )
+
     # pruning configurations
+    parser.add_argument(
+        "--pruner_algorithm",
+        type=str,
+        default="MWA",
+        help="The pruning algorithm to use.",
+        choices=["MWA", "PLATON"],
+    )
     parser.add_argument(
         '--pruning_params', 
         nargs='+', 
@@ -600,7 +623,20 @@ def main():
     else:
         raise ValueError(f"Unsupported time unit: {train_time.unit}")
     
-    pruner_algorithm = MWA.from_args(train_size, max_train_steps, len(train_dataloader), args)
+    # Initialize the pruner algorithm
+    if args.pruner_algorithm == "MWA":
+        pruner_algorithm = MWA.from_args(train_size, max_train_steps, len(train_dataloader), args)
+    elif args.pruner_algorithm == "PLATON":
+        pruner_algorithm = PLATON.from_args(train_size, max_train_steps, len(train_dataloader), args)
+    else:
+        raise ValueError(f"Unsupported pruner algorithm: {args.pruner_algorithm}")
+    
+    # Gradient clipping for PLATON
+    if args.pruner_algorithm == "PLATON":
+        gradient_clipping = GradientClipping(clipping_type="norm", clipping_threshold=1.0)
+        algorithms = [pruner_algorithm, gradient_clipping]
+    else:
+        algorithms = [pruner_algorithm]
 
     # initialize the trainer
     trainer = Trainer(
@@ -625,7 +661,7 @@ def main():
         callbacks=[LRMonitor(), RuntimeEstimator()],
 
         # algorithms
-        algorithms=[pruner_algorithm],
+        algorithms=algorithms,
 
         # checkpointing
         run_name=args.run_name,

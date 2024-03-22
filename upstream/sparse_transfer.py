@@ -13,7 +13,7 @@ from transformers import (
     default_data_collator,
 )
 
-from torchmetrics.classification import MulticlassAccuracy, MulticlassMatthewsCorrCoef, MulticlassF1Score
+from torchmetrics.classification import MulticlassAccuracy, MulticlassMatthewsCorrCoef
 from torchmetrics.regression import SpearmanCorrCoef, PearsonCorrCoef
 
 from composer.utils.dist import get_sampler
