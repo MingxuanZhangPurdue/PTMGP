@@ -411,7 +411,7 @@ def parse_args():
 
     # PLATON
     parser.add_argument(
-        "final_warmup_steps",
+        "--final_warmup_steps",
         type=str_int_and_none,
         default=0,
         help="The number of training batches/steps for final warmup."
