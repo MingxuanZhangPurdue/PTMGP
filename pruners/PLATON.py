@@ -51,6 +51,7 @@ class PLATON(Algorithm):
     @classmethod
     def from_args(
         self, 
+        train_size, 
         max_train_steps, 
         train_dataloader_len, 
         args
