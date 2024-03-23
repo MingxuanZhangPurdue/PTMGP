@@ -98,7 +98,6 @@ class PLATON(Algorithm):
 
 
     def update_ipt_with_local_window(self, model, train_step_index):
-        # Calculate the sensitivity and uncertainty 
         for n,p in model.named_parameters():
             if self.whether_prune_param(n):
                 if n not in self.exp_avg_ipt:
