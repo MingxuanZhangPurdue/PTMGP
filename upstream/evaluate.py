@@ -2,7 +2,7 @@ import argparse
 import torch
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from torchmetrics.classification import MulticlassAccuracy
+from evaluate import load_metric
 from transformers import (
     MODEL_MAPPING,
     AutoConfig,
@@ -223,8 +223,7 @@ def main():
 
     model = model.to("cuda") if torch.cuda.is_available() else model
     model.eval()
-    metric = MulticlassAccuracy(num_classes=model.state_dict()['bert.embeddings.word_embeddings.weight'].shape[0],
-                                ignore_index=-100)
+    metric = load_metric("accuracy")
     targets = []
     predictions = []
     for batch in tqdm(eval_dataloader):
@@ -233,7 +232,10 @@ def main():
             outputs = model(**batch)
         targets.append(batch["labels"].cpu().view(-1))
         predictions.append(outputs.logits.argmax(dim=-1).cpu().view(-1))
-    result = metric(torch.cat(predictions), torch.cat(targets))
+    targets = torch.cat(targets)
+    predictions = torch.cat(predictions)
+    indices = torch.where(targets != -100)
+    result = metric.compute(predictions=predictions[indices], references=targets[indices])
     print (result)
 
 if __name__ == "__main__":
