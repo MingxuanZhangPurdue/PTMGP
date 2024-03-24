@@ -1,5 +1,7 @@
 import argparse
+import tqdm
 import torch
+import evaluate
 from torch.utils.data import DataLoader
 
 from transformers import (
@@ -9,11 +11,6 @@ from transformers import (
     AutoTokenizer,
     DataCollatorForLanguageModeling,
 )
-
-from composer.utils.dist import get_sampler
-from composer.utils import reproducibility
-from composer.models.huggingface import HuggingFaceModel
-from composer.metrics.nlp import LanguageCrossEntropy, MaskedAccuracy
 
 from upstream.utils_datasets import get_tokenized_mlm_datasets
 
@@ -159,14 +156,6 @@ def parse_args():
         help="The number of processes to use for the preprocessing.",
     )
 
-    # reproducibility
-    parser.add_argument(
-        "--seed",
-        type=int, 
-        default=42, 
-        help="A seed for reproducible training."
-    )
-
     args = parser.parse_args()
 
     return args
@@ -176,9 +165,6 @@ def main():
 
     # parse the arguments
     args = parse_args()
-
-    # reproducibility
-    reproducibility.seed_all(args.seed)
 
     # load the model and tokenizer
     config = AutoConfig.from_pretrained(
@@ -194,13 +180,6 @@ def main():
         revision=args.model_revision,
         trust_remote_code=args.trust_remote_code,
     )
-
-    model_state_dict = torch.load(args.load_path)["state"]["model"] if args.checkpoint_load_path is not None else None
-    if model_state_dict is not None:
-        for key in list(model_state_dict.keys()):
-            parts = key.split('.')
-            new_key = '.'.join(parts[1:])
-            model_state_dict[new_key] =  model_state_dict.pop(key)
     model = AutoModelForMaskedLM.from_pretrained(
             args.model_name_or_path,
             config=config,
@@ -208,7 +187,6 @@ def main():
             revision=args.model_revision,
             trust_remote_code=args.trust_remote_code,
             low_cpu_mem_usage=args.low_cpu_mem_usage,
-            state_dict = model_state_dict
     )
 
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
@@ -240,21 +218,28 @@ def main():
         pad_to_multiple_of=8 if pad_to_multiple_of_8 else None,
     )
 
-    eval_sampler = get_sampler(eval_dataset, shuffle=False)
     eval_dataloader = DataLoader(
         eval_dataset, 
         collate_fn=data_collator, 
         batch_size=args.per_device_eval_batch_size, 
-        sampler=eval_sampler
+        shuffle=False
     )
 
-    # wrap the model with the composer model
-    metrics = [
-        LanguageCrossEntropy(ignore_index=-100),
-        MaskedAccuracy(ignore_index=-100)
-    ]
-    composer_model = HuggingFaceModel(model, tokenizer=tokenizer, metrics=metrics, use_logits=True)
-
+    y_hat = []
+    y = []
+    model = model.to("cuda") if torch.cuda.is_available() else model
+    model.eval()
+    for batch in tqdm(eval_dataloader):
+        batch = {k: v.to(model.device) for k, v in batch.items()}
+        with torch.no_grad():
+            outputs = model(**batch)
+        y_hat.append(outputs.logits.argmax(dim=-1))
+        y.append(batch["labels"])
+    y_hat = torch.cat(y_hat)
+    y = torch.cat(y)
+    metrics = evaluate.combine(["accuracy"])
+    result = metrics.compute(references=y, predictions=y_hat)
+    print (result)
 
 if __name__ == "__main__":
     main()
