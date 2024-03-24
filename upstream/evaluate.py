@@ -222,7 +222,6 @@ def main():
         args=args,
     )
 
-    train_dataset = tokenized_datasets["train"]
     eval_dataset = tokenized_datasets["validation"]
 
     if args.precision == "amp_fp16" or args.precision == "amp_bf16":
