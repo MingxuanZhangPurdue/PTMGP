@@ -201,23 +201,11 @@ def main():
     )
 
     eval_dataset = tokenized_datasets["validation"]
-
-    if args.precision == "amp_fp16" or args.precision == "amp_bf16":
-        use_fp16 = True
-    else:
-        use_fp16 = False
-
-    pad_to_multiple_of_8 = (
-        args.line_by_line
-        and use_fp16
-        and not args.pad_to_max_length
-    )
     data_collator = DataCollatorForLanguageModeling(
         tokenizer=tokenizer,
         mlm_probability=args.mlm_probability,
-        pad_to_multiple_of=8 if pad_to_multiple_of_8 else None,
+        pad_to_multiple_of=None,
     )
-
     eval_dataloader = DataLoader(
         eval_dataset, 
         collate_fn=data_collator, 
