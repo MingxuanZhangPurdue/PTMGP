@@ -1,7 +1,7 @@
 import argparse
-import tqdm
 import torch
 import evaluate
+from tqdm import tqdm
 from torch.utils.data import DataLoader
 
 from transformers import (
