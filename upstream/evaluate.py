@@ -222,8 +222,8 @@ def main():
         batch = {k: v.to(model.device) for k, v in batch.items()}
         with torch.no_grad():
             outputs = model(**batch)
-        labels =  predictions=batch["labels"].cpu()
-        predictions = outputs.logits.argmax(dim=-1).cpu()
+        labels =  predictions=batch["labels"].cpu().view(-1)
+        predictions = outputs.logits.argmax(dim=-1).cpu().view(-1)
         indices = [[i for i, x in enumerate(labels) if x != -100]]
         metrics.add_batch(references=labels[indices], predictions=predictions[indices])
         #y_hat.append(outputs.logits.argmax(dim=-1))
