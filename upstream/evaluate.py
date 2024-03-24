@@ -2,7 +2,7 @@ import argparse
 import torch
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from evaluate import load_metric
+from evaluate import load
 from transformers import (
     MODEL_MAPPING,
     AutoConfig,
@@ -223,7 +223,7 @@ def main():
 
     model = model.to("cuda") if torch.cuda.is_available() else model
     model.eval()
-    metric = load_metric("accuracy")
+    metric = load("accuracy")
     targets = []
     predictions = []
     for batch in tqdm(eval_dataloader):
