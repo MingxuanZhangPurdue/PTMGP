@@ -213,20 +213,21 @@ def main():
         shuffle=False
     )
 
-    y_hat = []
-    y = []
+    #y_hat = []
+    #y = []
     model = model.to("cuda") if torch.cuda.is_available() else model
     model.eval()
+    metrics = evaluate.combine(["accuracy"])
     for batch in tqdm(eval_dataloader):
         batch = {k: v.to(model.device) for k, v in batch.items()}
         with torch.no_grad():
             outputs = model(**batch)
-        y_hat.append(outputs.logits.argmax(dim=-1))
-        y.append(batch["labels"])
-    y_hat = torch.cat(y_hat)
-    y = torch.cat(y)
-    metrics = evaluate.combine(["accuracy"])
-    result = metrics.compute(references=y, predictions=y_hat)
+        metrics.add_batch(references=outputs.logits.argmax(dim=-1).cpu(), predictions=batch["labels"].cpu())
+        #y_hat.append(outputs.logits.argmax(dim=-1))
+        #y.append(batch["labels"])
+    #y_hat = torch.cat(y_hat)
+    #y = torch.cat(y)
+    result = metrics.compute()
     print (result)
 
 if __name__ == "__main__":
