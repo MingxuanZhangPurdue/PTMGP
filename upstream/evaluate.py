@@ -179,13 +179,21 @@ def main():
         revision=args.model_revision,
         trust_remote_code=args.trust_remote_code,
     )
+
+    model_state_dict = torch.load(args.checkpoint_load_path)["state"]["model"] if args.checkpoint_load_path is not None else None
+    if model_state_dict is not None:
+        for key in list(model_state_dict.keys()):
+            parts = key.split('.')
+            new_key = '.'.join(parts[1:])
+            model_state_dict[new_key] =  model_state_dict.pop(key)
     model = AutoModelForMaskedLM.from_pretrained(
-            args.model_name_or_path,
-            config=config,
-            cache_dir=args.cache_dir,
-            revision=args.model_revision,
-            trust_remote_code=args.trust_remote_code,
-            low_cpu_mem_usage=args.low_cpu_mem_usage,
+        args.model_name_or_path,
+        config=config,
+        cache_dir=args.cache_dir,
+        revision=args.model_revision,
+        trust_remote_code=args.trust_remote_code,
+        low_cpu_mem_usage=args.low_cpu_mem_usage,
+        state_dict = model_state_dict
     )
 
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
