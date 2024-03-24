@@ -1,57 +1,28 @@
 import argparse
-import warnings
 import torch
-import evaluate
-from tqdm import tqdm
 from torch.utils.data import DataLoader
-from datasets import load_dataset
-from transformers import AutoModelForSequenceClassification, AutoConfig, AutoTokenizer, DataCollatorWithPadding
 
-task_to_keys = {
-    "mnli": ("premise", "hypothesis"),
-    "mnli_mismatched": ("premise", "hypothesis"),
-    "qqp":  ("question1", "question2"),
-}
+from transformers import (
+    MODEL_MAPPING,
+    AutoConfig,
+    AutoModelForMaskedLM,
+    AutoTokenizer,
+    DataCollatorForLanguageModeling,
+)
+
+from composer.utils.dist import get_sampler
+from composer.utils import reproducibility
+from composer.models.huggingface import HuggingFaceModel
+from composer.metrics.nlp import LanguageCrossEntropy, MaskedAccuracy
+
+from upstream.utils_datasets import get_tokenized_mlm_datasets
+
+MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
+MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Evaluate a pruned model a glue task.")
-    parser.add_argument(
-        "--model_name_or_path",
-        default=None,
-        type=str,
-        required=True,
-        help="Path to pretrained model or model identifier from huggingface.co/models.",
-    )
-    parser.add_argument(
-        "--load_path",
-        default=None,
-        type=str,
-        help="Path to the pruned model to evaluate.",
-    )
-    parser.add_argument(
-        "--task_name",
-        type=str,
-        required=True,
-        help="The name of the glue task to train on.",
-        choices=list(task_to_keys.keys()),
-    )
-    parser.add_argument(
-        "--eval_batch_size",
-        type=int,
-        default=256,
-        help="Batch size for evaluation.",
-    )
-    parser.add_argument(
-        "--preprocessing_num_workers",
-        type=int,
-        default=None,
-        help="The number of processes to use for the preprocessing.",
-    )
-    parser.add_argument(
-        "--overwrite_cache",
-        action="store_true",
-        help="Overwrite the cached training and evaluation sets",
-    )
+    parser = argparse.ArgumentParser(description="Evaluate a upstream pruned model.")
     parser.add_argument(
         "--trust_remote_code",
         action="store_true",
@@ -62,19 +33,12 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--ignore_mismatched_sizes",
+        "--low_cpu_mem_usage",
         action="store_true",
-        help="Whether or not to enable to load a pretrained model whose head dimensions are different.",
-    )
-    parser.add_argument(
-        "--use_slow_tokenizer",
-        action="store_true",
-        help="If passed, will use a slow tokenizer (not backed by the 🤗 Tokenizers library).",
-    )
-    parser.add_argument(
-        "--pad_to_max_length",
-        action="store_true",
-        help="If passed, pad all samples to `max_seq_length`. Otherwise, dynamic padding is used.",
+        help=(
+            "It is an option to create the model as an empty shell, then only materialize its parameters when the pretrained weights are loaded. "
+            "If passed, LLM loading time and RAM consumption will be benefited."
+        ),
     )
     parser.add_argument(
         "--cache_dir",
@@ -83,15 +47,126 @@ def parse_args():
         help="Where to download pretrained models and datasets.",
     )
     parser.add_argument(
+        "--overwrite_cache", 
+        action="store_true", 
+        help="Overwrite the cached training and evaluation sets"
+    )
+
+    # model arguments
+    parser.add_argument(
+        "--checkpoint_load_path",
+        type=str,
+        default=None,
+        help="Path to load the checkpoint."
+    )
+    parser.add_argument(
+        "--per_device_eval_batch_size", 
+        type=int, 
+        default=128,
+        help="Batch size (per device) for the evaluation dataloader."
+    )
+    parser.add_argument(
+        "--model_name_or_path",
+        type=str,
+        help="Path to pretrained model or model identifier from huggingface.co/models.",
+        required=True,
+    )
+    parser.add_argument(
+        "--config_name",
+        type=str,
+        default=None,
+        help="Pretrained config name or path if not the same as model_name",
+    )
+    parser.add_argument(
+        "--model_revision",
+        type=str,
+        default="main",
+        help="The specific model version to use "
+        "(can be a branch name, tag name or commit id).",
+    )
+
+    # datasets arguments
+    parser.add_argument(
+        "--dataset_name",
+        type=str,
+        required=True,
+        help="The name of the dataset to use (via the datasets library).",
+    )
+    parser.add_argument(
+        "--dataset_config_name",
+        type=str,
+        default=None,
+        help="The configuration name of the dataset to use (via the datasets library).",
+    )
+    parser.add_argument(
+        "--dataset_name_2",
+        type=str,
+        default=None,
+        help="The name of the dataset to use (via the datasets library).",
+    )
+    parser.add_argument(
+        "--dataset_config_name_2",
+        type=str,
+        default=None,
+        help="The configuration name of the dataset to use (via the datasets library).",
+    )
+    parser.add_argument(
+        "--validation_split_percentage",
+        default=5,
+        help="The percentage of the train set used as validation set in case there's no validation split",
+    )
+
+    # datasets preprocessing arguments
+    parser.add_argument(
+        "--pad_to_max_length",
+        action="store_true",
+        help="If passed, pad all samples to `max_length`. Otherwise, dynamic padding is used.",
+    )
+    parser.add_argument(
+        "--tokenizer_name",
+        type=str,
+        default=None,
+        help="Pretrained tokenizer name or path if not the same as model_name",
+    )
+    parser.add_argument(
+        "--use_slow_tokenizer",
+        action="store_true",
+        help="If passed, will use a slow tokenizer (not backed by the 🤗 Tokenizers library).",
+    )
+    parser.add_argument(
         "--max_seq_length",
         type=int,
         default=512,
         help=(
-            "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
-            "sequences shorter will be padded if `--pad_to_max_length` is passed."
+            "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated."
         ),
     )
-    
+    parser.add_argument(
+        "--mlm_probability", 
+        type=float, 
+        default=0.15, 
+        help="Ratio of tokens to mask for masked language modeling loss"
+    )
+    parser.add_argument(
+        "--line_by_line",
+        action="store_true",
+        help="Whether distinct lines of text in the dataset are to be handled as distinct sequences.",
+    )
+    parser.add_argument(
+        "--preprocessing_num_workers",
+        type=int,
+        default=None,
+        help="The number of processes to use for the preprocessing.",
+    )
+
+    # reproducibility
+    parser.add_argument(
+        "--seed",
+        type=int, 
+        default=42, 
+        help="A seed for reproducible training."
+    )
+
     args = parser.parse_args()
 
     return args
@@ -99,109 +174,88 @@ def parse_args():
 
 def main():
 
+    # parse the arguments
     args = parse_args()
 
-    if args.task_name == "mnli":
-        split = "validation_matched"
-    elif args.task_name == "mnli_mismatched":
-        split = "validation_mismatched"
-    else:
-        split = "validation"
+    # reproducibility
+    reproducibility.seed_all(args.seed)
 
-    raw_dataset = load_dataset(
-        "glue",
-        args.task_name if args.task_name != "mnli_mismatched" else "mnli",
-        split=split,
+    # load the model and tokenizer
+    config = AutoConfig.from_pretrained(
+        args.model_name_or_path,
         cache_dir=args.cache_dir,
+        revision=args.model_revision,
         trust_remote_code=args.trust_remote_code,
     )
-
-    label_list = raw_dataset.features["label"].names
-    num_labels = len(label_list)
-
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_name_or_path,
         cache_dir=args.cache_dir,
         use_fast=not args.use_slow_tokenizer,
+        revision=args.model_revision,
         trust_remote_code=args.trust_remote_code,
     )
 
-    config = AutoConfig.from_pretrained(
-        args.model_name_or_path,
-        num_labels=num_labels,
-        finetuning_task=args.task_name,
-        cache_dir=args.cache_dir,
-        trust_remote_code=args.trust_remote_code,
-    )
-
-    model_state_dict = torch.load(args.load_path)["state"]["model"] if args.load_path is not None else None
+    model_state_dict = torch.load(args.load_path)["state"]["model"] if args.checkpoint_load_path is not None else None
     if model_state_dict is not None:
         for key in list(model_state_dict.keys()):
             parts = key.split('.')
             new_key = '.'.join(parts[1:])
             model_state_dict[new_key] =  model_state_dict.pop(key)
-    model = AutoModelForSequenceClassification.from_pretrained(
-        args.model_name_or_path,
-        config=config,
-        cache_dir=args.cache_dir,
-        ignore_mismatched_sizes=args.ignore_mismatched_sizes,
-        trust_remote_code=args.trust_remote_code,
-        state_dict = model_state_dict
+    model = AutoModelForMaskedLM.from_pretrained(
+            args.model_name_or_path,
+            config=config,
+            cache_dir=args.cache_dir,
+            revision=args.model_revision,
+            trust_remote_code=args.trust_remote_code,
+            low_cpu_mem_usage=args.low_cpu_mem_usage,
+            state_dict = model_state_dict
     )
 
-    sentence1_key, sentence2_key = task_to_keys[args.task_name]
+    # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
+    # on a small vocab and want a smaller embedding size, remove this test.
+    embedding_size = model.get_input_embeddings().weight.shape[0]
+    if len(tokenizer) > embedding_size:
+        model.resize_token_embeddings(len(tokenizer))
 
-    if args.max_seq_length > tokenizer.model_max_length:
-        warnings.warn(
-            f"The max_seq_length passed ({args.max_seq_length}) is larger than the maximum length for the "
-            f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
-        )
-    max_seq_length = min(args.max_seq_length, tokenizer.model_max_length)
-
-    def preprocess_function(examples):
-        # tokenize the texts
-        texts = (
-            (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
-        )
-        result = tokenizer(*texts, padding=False, max_length=max_seq_length, truncation=True)
-
-        if "label" in examples:
-            # in all cases, rename the column to labels because the model will expect that.
-            result["labels"] = examples["label"]
-        return result
-
-    eval_dataset = raw_dataset.map(
-        preprocess_function,
-        batched=True,
-        num_proc=args.preprocessing_num_workers,
-        remove_columns=raw_dataset.column_names,
-        load_from_cache_file=not args.overwrite_cache,
-        desc="Running tokenizer on dataset",
+    tokenized_datasets = get_tokenized_mlm_datasets(
+        tokenizer=tokenizer,
+        args=args,
     )
 
-    data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=None)
-    eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=args.eval_batch_size, shuffle=False)
+    train_dataset = tokenized_datasets["train"]
+    eval_dataset = tokenized_datasets["validation"]
 
-    y_hat = []
-    y = []
-    model = model.to("cuda") if torch.cuda.is_available() else model
-    model.eval()
-    for batch in tqdm(eval_dataloader):
-        batch = {k: v.to(model.device) for k, v in batch.items()}
-        with torch.no_grad():
-            outputs = model(**batch)
-        y_hat.append(outputs.logits.argmax(dim=-1))
-        y.append(batch["labels"])
-    y_hat = torch.cat(y_hat)
-    y = torch.cat(y)
-
-    if args.task_name in ["mnli", "mnli_mismatched"]:
-        metrics = evaluate.combine(["accuracy"])
+    if args.precision == "amp_fp16" or args.precision == "amp_bf16":
+        use_fp16 = True
     else:
-        metrics = evaluate.combine(["accuracy", "f1"])
+        use_fp16 = False
 
-    result = metrics.compute(references=y, predictions=y_hat)
-    print (result)
+    pad_to_multiple_of_8 = (
+        args.line_by_line
+        and use_fp16
+        and not args.pad_to_max_length
+    )
+    data_collator = DataCollatorForLanguageModeling(
+        tokenizer=tokenizer,
+        mlm_probability=args.mlm_probability,
+        pad_to_multiple_of=8 if pad_to_multiple_of_8 else None,
+    )
+
+    eval_sampler = get_sampler(eval_dataset, shuffle=False)
+    eval_dataloader = DataLoader(
+        eval_dataset, 
+        collate_fn=data_collator, 
+        batch_size=args.per_device_eval_batch_size, 
+        sampler=eval_sampler
+    )
+
+    # wrap the model with the composer model
+    metrics = [
+        LanguageCrossEntropy(ignore_index=-100),
+        MaskedAccuracy(ignore_index=-100)
+    ]
+    composer_model = HuggingFaceModel(model, tokenizer=tokenizer, metrics=metrics, use_logits=True)
+
 
 if __name__ == "__main__":
     main()
