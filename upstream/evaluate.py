@@ -2,7 +2,6 @@ import argparse
 import torch
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-import evaluate
 from torchmetrics.classification import MulticlassAccuracy
 from transformers import (
     MODEL_MAPPING,
