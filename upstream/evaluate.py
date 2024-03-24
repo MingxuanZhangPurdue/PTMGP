@@ -1,9 +1,9 @@
 import argparse
 import torch
-import evaluate
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-
+import evaluate
+from torchmetrics.classification import MulticlassAccuracy
 from transformers import (
     MODEL_MAPPING,
     AutoConfig,
@@ -222,7 +222,10 @@ def main():
         batch = {k: v.to(model.device) for k, v in batch.items()}
         with torch.no_grad():
             outputs = model(**batch)
-        metrics.add_batch(references=outputs.logits.argmax(dim=-1).cpu(), predictions=batch["labels"].cpu())
+        labels =  predictions=batch["labels"].cpu()
+        predictions = outputs.logits.argmax(dim=-1).cpu()
+        indices = [[i for i, x in enumerate(labels) if x != -100]]
+        metrics.add_batch(references=labels[indices], predictions=predictions[indices])
         #y_hat.append(outputs.logits.argmax(dim=-1))
         #y.append(batch["labels"])
     #y_hat = torch.cat(y_hat)
