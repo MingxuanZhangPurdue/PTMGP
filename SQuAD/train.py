@@ -1004,23 +1004,6 @@ def main():
         )
     else:
         raise ValueError(f"Unsupported pruner algorithm: {args.pruner_algorithm}")
-    
-    pruner = MWA(
-        train_size=len(train_dataset),
-        max_train_steps=args.max_train_steps,
-        sigma0=args.sigma0,
-        sigma1=args.sigma1,
-        lambda_mix=args.lambda_mix,
-        alpha_i_lambda_mix=args.alpha_i_lambda_mix, 
-        alpha_f_lambda_mix=args.alpha_f_lambda_mix,
-        initial_sparsity=args.initial_sparsity,
-        final_sparsity=args.final_sparsity,
-        initial_warmup_steps=args.initial_warmup_steps,
-        sparse_finetune_steps=args.sparse_finetune_steps,
-        pruning_interval=args.pruning_interval,
-        log_interval=args.log_interval,
-        pruning_params=args.pruning_params,
-    )
 
     # Train!
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
