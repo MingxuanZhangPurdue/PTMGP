@@ -64,6 +64,7 @@ from transformers.utils.versions import require_version
 ###################
 from torch.optim.lr_scheduler import LinearLR
 from pruners.MWA import MWA
+from pruners.PLATON import PLATON
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 #check_min_version("4.39.0.dev0")
@@ -407,6 +408,35 @@ def parse_args():
         type=int,
         default=None,
         help="Interval to log all research-related information."
+    )
+
+    # PLATON
+    parser.add_argument(
+        "--final_warmup_steps",
+        type=str_int_and_none,
+        default=0,
+        help="The number of training batches/steps for final warmup."
+    )
+    parser.add_argument(
+        "--beta1",
+        type=float,
+        default=0.85,
+        help="The beta1 value for the PLATON algorithm."
+    )
+    parser.add_argument(
+        "--beta2",
+        type=float,
+        default=0.85,
+        help="The beta2 value for the PLATON algorithm."
+    )
+
+    # pruning configurations
+    parser.add_argument(
+        "--pruner_algorithm",
+        type=str,
+        default="MWA",
+        help="The pruning algorithm to use.",
+        choices=["MWA", "PLATON"],
     )
     parser.add_argument(
         '--pruning_params', 
@@ -942,6 +972,39 @@ def main():
     #####################
     #  Init the pruner  #
     #####################
+     # Initialize the pruner algorithm
+    if args.pruner_algorithm == "MWA":
+        pruner = MWA(
+            train_size=len(train_dataset),
+            max_train_steps=args.max_train_steps,
+            sigma0=args.sigma0,
+            sigma1=args.sigma1,
+            lambda_mix=args.lambda_mix,
+            alpha_i_lambda_mix=args.alpha_i_lambda_mix, 
+            alpha_f_lambda_mix=args.alpha_f_lambda_mix,
+            initial_sparsity=args.initial_sparsity,
+            final_sparsity=args.final_sparsity,
+            initial_warmup_steps=args.initial_warmup_steps,
+            sparse_finetune_steps=args.sparse_finetune_steps,
+            pruning_interval=args.pruning_interval,
+            log_interval=args.log_interval,
+            pruning_params=args.pruning_params,
+        )
+    elif args.pruner_algorithm == "PLATON":
+        pruner = PLATON(
+            max_train_steps=args.max_train_steps,
+            beta1=args.beta1,
+            beta2=args.beta2,
+            initial_sparsity=0.0,
+            final_sparsity=args.final_sparsity,
+            initial_warmup_steps=args.initial_warmup_steps,
+            final_warmup_steps=args.final_warmup_steps,
+            pruning_interval=args.pruning_interval,
+            pruning_params=args.pruning_params,
+        )
+    else:
+        raise ValueError(f"Unsupported pruner algorithm: {args.pruner_algorithm}")
+    
     pruner = MWA(
         train_size=len(train_dataset),
         max_train_steps=args.max_train_steps,
@@ -1015,6 +1078,7 @@ def main():
     ###############
     pruner.print_pruning_modules(model)
     if (args.with_tracking and
+        args.pruner_algorithm == "MWA" and
         completed_steps == 0):
         remaining_candidate_magnitude_stat = pruner.get_magnitude_stat(model, which="remaining_candidate")
         remaining_non_candidate_magnitude_stat = pruner.get_magnitude_stat(model, which="remaining_non_candidate")
@@ -1057,7 +1121,7 @@ def main():
                 ##########################
                 #  Apply prior gradient  # 
                 ##########################
-                if completed_steps <= pruner.pruning_end:
+                if completed_steps <= pruner.pruning_end and args.pruner_algorithm == "MWA":
                     prior_threshold, sigma0, sigma1, lambda_mix = pruner.apply_prior_grad(model, completed_steps)
                     ################
                     #  Logging #2  # 
@@ -1078,6 +1142,7 @@ def main():
                 #  Logging #3  #
                 ################
                 if (pruner.log_interval is not None and
+                    args.pruner_algorithm == "MWA" and
                     args.with_tracking and
                     completed_steps > pruner.pruning_start and
                     completed_steps <= pruner.pruning_end and
@@ -1091,9 +1156,12 @@ def main():
                 ###########################################################
                 #  Prune the model based on the scheduled sparsity level  #                                
                 ###########################################################
-                sparsity, mask_threshold, mask = pruner.magnitude_pruning(model, completed_steps)
-                if mask is not None:
-                    pruner.current_sparsity_mask = mask
+                if args.pruner_algorithm == "MWA":
+                    sparsity, mask_threshold, mask = pruner.magnitude_pruning(model, completed_steps)
+                    if mask is not None:
+                        pruner.current_sparsity_mask = mask
+                elif args.pruner_algorithm == "PLATON":
+                    sparsity, mask_threshold = pruner.update_and_pruning(model, completed_steps)
 
                 ################
                 #  Logging #4  #
@@ -1113,6 +1181,7 @@ def main():
                 #  Logging #5  #
                 ################
                 if (pruner.log_interval is not None and
+                    args.pruner_algorithm == "MWA" and
                     args.with_tracking):
                     if completed_steps % pruner.log_interval == 0:
                         remaining_candidate_magnitude_stat = pruner.get_magnitude_stat(model, which="remaining_candidate", mask=mask)
