@@ -1124,8 +1124,8 @@ def main():
                 ################
                 #  Logging #3  #
                 ################
-                if (pruner.log_interval is not None and
-                    args.pruner_algorithm == "MWA" and
+                if (args.pruner_algorithm == "MWA" and
+                    pruner.log_interval is not None and
                     args.with_tracking and
                     completed_steps > pruner.pruning_start and
                     completed_steps <= pruner.pruning_end and
@@ -1163,8 +1163,8 @@ def main():
                 ################
                 #  Logging #5  #
                 ################
-                if (pruner.log_interval is not None and
-                    args.pruner_algorithm == "MWA" and
+                if (args.pruner_algorithm == "MWA" and
+                    pruner.log_interval is not None and
                     args.with_tracking):
                     if completed_steps % pruner.log_interval == 0:
                         remaining_candidate_magnitude_stat = pruner.get_magnitude_stat(model, which="remaining_candidate", mask=mask)
