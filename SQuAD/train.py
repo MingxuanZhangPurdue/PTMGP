@@ -1119,6 +1119,9 @@ def main():
                         )
                     pruner.current_prior_threshold = prior_threshold
 
+                if args.pruner_algorithm == "PLATON":
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+
                 optimizer.step()
 
                 ################
