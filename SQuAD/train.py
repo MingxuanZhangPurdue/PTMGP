@@ -144,6 +144,7 @@ def parse_args():
     parser.add_argument(
         "--model_name_or_path",
         type=str,
+        default="bert-base-uncased",
         help="Path to pretrained model or model identifier from huggingface.co/models.",
         required=False,
     )
