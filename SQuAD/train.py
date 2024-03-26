@@ -1120,6 +1120,9 @@ def main():
                         )
                     pruner.current_prior_threshold = prior_threshold
 
+                ##################################
+                #  Gradient clipping for PLATON  # 
+                ##################################
                 if args.pruner_algorithm == "PLATON":
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
 
