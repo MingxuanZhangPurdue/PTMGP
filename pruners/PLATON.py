@@ -25,6 +25,7 @@ class PLATON(Algorithm):
         self.ipt = {}
         self.exp_avg_ipt = {}
         self.exp_avg_unc = {}
+        self.final_fixed_mask = None
 
         self.max_train_steps = max_train_steps
 
@@ -92,7 +93,6 @@ class PLATON(Algorithm):
         elif train_step_index >= self.pruning_end:
             sparsity = self.final_sparsity
             pruning_ind = True
-            print ("Pruning has ended, generate the final mask")
         else:
             raise ValueError(f"Invalid train_step_index value: {train_step_index}")
         return sparsity, pruning_ind
@@ -152,14 +152,29 @@ class PLATON(Algorithm):
                 p.detach().masked_fill_(mask[n], 0.0)
         return mask_threshold, mask
 
+    def prune_with_mask(self, model, mask):
+        for n, p in model.named_parameters():
+            if self.whether_prune_param(n):
+                p.detach().masked_fill_(mask[n], 0.0)
+
     def update_and_pruning(self, model, train_step_index):
         self.update_ipt_with_local_window(model, train_step_index)
         sparsity, pruning_ind = self.sparsity_scheduler(train_step_index)
         if pruning_ind and sparsity > 0.0:
-            mask_threshold, _ = self.prune_with_threshold(model, sparsity)
+            if train_step_index == self.pruning_end:
+                print ("Gradual pruning stage is over. Generate the final fixed mask...")
+                mask_threshold, mask = self.prune_with_threshold(model, sparsity)
+                self.final_fixed_mask = mask
+            elif train_step_index > self.pruning_end:
+                self.prune_with_mask(model, self.final_fixed_mask)
+                mask = self.final_fixed_mask
+                mask_threshold = 0.0
+            else:
+                mask_threshold, mask = self.prune_with_threshold(model, sparsity)
         else:
             mask_threshold = None
-        return sparsity, mask_threshold
+            mask = None
+        return sparsity, mask_threshold, mask
 
     def print_pruning_modules(self, model):
         print ("List of model modules to be pruned:")
@@ -175,9 +190,15 @@ class PLATON(Algorithm):
     def apply(self, event, state, logger):
         if event == Event.FIT_START:
             self.print_pruning_modules(state.model)
+            # in case we resume training from a checkpoint after the gradual pruning stage, we need to generate the final fixed mask first
+            if (state.timestamp.batch.value > self.pruning_end and 
+                self.final_fixed_mask is None):
+                print ("Generate the final fixed mask first...")
+                _, mask = self.prune_with_threshold(state.model, self.final_sparsity)
+                self.final_fixed_mask = mask
         elif event == Event.BATCH_END:
-            sparsity, mask_threshold = self.update_and_pruning(state.model, state.timestamp.batch.value-1)
+            sparsity, mask_threshold, mask = self.update_and_pruning(state.model, state.timestamp.batch.value-1)
             if (logger is not None):
-                logger.log_metrics({"sparsity": float(sparsity)})
+                logger.log_metrics({"pruning/sparsity": float(sparsity)})
                 if mask_threshold is not None:
-                    logger.log_metrics({"mask_threshold": float(mask_threshold)})
+                    logger.log_metrics({"pruning/mask_threshold": float(mask_threshold)})
