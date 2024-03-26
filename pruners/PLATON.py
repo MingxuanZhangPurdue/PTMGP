@@ -92,6 +92,7 @@ class PLATON(Algorithm):
         elif train_step_index >= self.pruning_end:
             sparsity = self.final_sparsity
             pruning_ind = True
+            print ("Pruning has ended, generate the final mask")
         else:
             raise ValueError(f"Invalid train_step_index value: {train_step_index}")
         return sparsity, pruning_ind
@@ -158,7 +159,6 @@ class PLATON(Algorithm):
             mask_threshold, _ = self.prune_with_threshold(model, sparsity)
         else:
             mask_threshold = None
-        
         return sparsity, mask_threshold
 
     def print_pruning_modules(self, model):
