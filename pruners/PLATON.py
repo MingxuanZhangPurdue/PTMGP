@@ -158,7 +158,8 @@ class PLATON(Algorithm):
                 p.detach().masked_fill_(mask[n], 0.0)
 
     def update_and_pruning(self, model, train_step_index):
-        self.update_ipt_with_local_window(model, train_step_index)
+        if train_step_index <= self.pruning_end:
+            self.update_ipt_with_local_window(model, train_step_index)
         sparsity, pruning_ind = self.sparsity_scheduler(train_step_index)
         if pruning_ind and sparsity > 0.0:
             if train_step_index == self.pruning_end:
