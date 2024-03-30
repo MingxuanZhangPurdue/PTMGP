@@ -1,1 +1,60 @@
+#!/bin/bash
 
+seed=47
+sparsity=0.9
+
+composer -m -n 1 GLUE.train \
+  --wandb_project_name GLUE \
+  --task_name qqp \
+  --max_duration 10ep \
+  --per_device_train_batch_size 32 \
+  --learning_rate 5e-5 \
+  --lr_scheduler linear_with_warmup \
+  --alpha_f 0.1 \
+  --t_warmup 0ba \
+  --sigma0 1e-10 \
+  --sigma1 0.05 \
+  --lambda_mix 0.1 \
+  --alpha_i_lambda_mix 1.0 \
+  --alpha_f_lambda_mix 0.001 \
+  --initial_warmup_steps 2ep \
+  --sparse_finetune_steps 0ep \
+  --pruning_interval 100 \
+  --seed ${seed} \
+  --initial_sparsity 0.3 \
+  --final_sparsity ${sparsity} \
+  --run_name qqp_${sparsity}_${seed} \
+  --save_folder ./checkpoints/GLUE/qqp/${sparsity}/${seed} \
+  --save_interval 1dur \
+  --eval_interval 1dur \
+  --log_interval 1000 \
+  --autoresume
+
+composer -m -n 1 GLUE.train \
+  --model_name_or_path microsoft/deberta-v3-base \
+  --pruning_params layer.*.attention.output.dense.weight layer.*.attention.self.query_proj.weight layer.*.attention.self.key_proj.weight layer.*.attention.self.value_proj.weight layer.*.intermediate.dense.weight layer.*.output.dense.weight \
+  --wandb_project_name GLUE \
+  --task_name qqp \
+  --max_duration 10ep \
+  --per_device_train_batch_size 32 \
+  --learning_rate 5e-5 \
+  --lr_scheduler linear_with_warmup \
+  --alpha_f 0.1 \
+  --t_warmup 0ba \
+  --sigma0 1e-10 \
+  --sigma1 0.05 \
+  --lambda_mix 0.1 \
+  --alpha_i_lambda_mix 1.0 \
+  --alpha_f_lambda_mix 0.001 \
+  --initial_warmup_steps 2ep \
+  --sparse_finetune_steps 0ep \
+  --pruning_interval 100 \
+  --seed ${seed} \
+  --initial_sparsity 0.3 \
+  --final_sparsity ${sparsity} \
+  --run_name qqp_${sparsity}_${seed} \
+  --save_folder ./checkpoints/GLUE/qqp/${sparsity}/${seed} \
+  --save_interval 1dur \
+  --eval_interval 1dur \
+  --log_interval 1000 \
+  --autoresume
