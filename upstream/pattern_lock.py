@@ -27,6 +27,11 @@ class PatternLock(Algorithm):
             mask,
         ):
         self.mask = mask
+    
+    def verify_pruned_model(self, model, mask):
+        for n, p in model.named_parameters():
+            if n in mask:
+                assert (p.detach().masked_select(mask[n]).abs().sum().item() == 0.0)
 
     def zero_pruned_grad(self, model, mask):
         for n, p in model.named_parameters():
@@ -47,5 +52,6 @@ class PatternLock(Algorithm):
     def apply(self, event, state, logger):
         if event == Event.FIT_START:
             self.print_pruned_modules(self.mask)
+            self.verify_pruned_model(state.model, self.mask)
         elif event == Event.AFTER_TRAIN_BATCH:
             self.zero_pruned_grad(state.model, self.mask)
