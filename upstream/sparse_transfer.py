@@ -365,8 +365,10 @@ def main():
         state_dict = pruned_checkpoint
     )
     if os.path.exists(os.path.join(args.pruned_checkpoint_folder, "final_fixed_mask.pt")):
+        print("Using existing fixed mask for the final warmup.")
         pruned_mask = torch.load(os.path.join(args.pruned_checkpoint_folder, "final_fixed_mask.pt"))
     else:
+        print ("Generating a fixed mask for the final warmup.")
         pruned_mask = generate_mask(model, args.sparsity, args.pruned_params)
 
     # set the evluation metrics based on the task
