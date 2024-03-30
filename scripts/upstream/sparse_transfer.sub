@@ -8,6 +8,7 @@ composer -m -n 1 upstream.sparse_transfer \
   --run_name sparse_transfer/qqp/${sparsity}/${seed} \
   --save_folder ./checkpoints/sparse_transfer/qqp/${sparsity}/${seed} \
   --save_interval 1dur \
+  --eval_interval 1dur \
   --autoresume \
   --clipping_threshold 1.0 \
   --precision fp32 \
@@ -28,6 +29,7 @@ composer -m -n 1 upstream.sparse_transfer \
   --run_name sparse_transfer/mnli/${sparsity}/${seed} \
   --save_folder ./checkpoints/sparse_transfer/mnli/${sparsity}/${seed} \
   --save_interval 1dur \
+  --eval_interval 1dur \
   --autoresume \
   --clipping_threshold 1.0 \
   --precision fp32 \
@@ -47,6 +49,7 @@ composer -m -n 1 upstream.sparse_transfer \
   --run_name sparse_transfer/qnli/${sparsity}/${seed} \
   --save_folder ./checkpoints/sparse_transfer/qnli/${sparsity}/${seed} \
   --save_interval 1dur \
+  --eval_interval 1dur \
   --autoresume \
   --clipping_threshold 1.0 \
   --precision fp32 \
@@ -67,6 +70,7 @@ composer -m -n 1 upstream.sparse_transfer \
   --run_name sparse_transfer/sst2/${sparsity}/${seed} \
   --save_folder ./checkpoints/sparse_transfer/sst2/${sparsity}/${seed} \
   --save_interval 1dur \
+  --eval_interval 1dur \
   --autoresume \
   --clipping_threshold 1.0 \
   --precision fp32 \
