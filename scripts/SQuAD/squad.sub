@@ -1,0 +1,57 @@
+#!/bin/bash
+
+seed=47
+sparsity=0.9
+
+python -m SQuAD.train \
+  --dataset_name squad \
+  --model_name_or_path bert-base-uncased \
+  --output_dir ./checkpoints/SQuAD/${sparsity}/${seed} \
+  --per_device_train_batch_size 16 \
+  --per_device_eval_batch_size 64 \
+  --learning_rate 5e-5 \
+  --alpha_f 0.1 \
+  --num_train_epochs 10 \
+  --seed ${seed} \
+  --checkpointing_steps 2500 \
+  --with_tracking \
+  --report_to wandb \
+  --sigma0 1e-10 \
+  --sigma1 0.05 \
+  --lambda_mix 1e-1 \
+  --alpha_i_lambda_mix 1.0 \
+  --alpha_f_lambda_mix 0.001 \
+  --initial_warmup_steps 11000 \
+  --sparse_finetune_steps 0 \
+  --pruning_interval 100 \
+  --initial_sparsity 0.5 \
+  --final_sparsity ${sparsity} \
+  --log_interval 1000
+
+python -m SQuAD.train \
+  --model_name_or_path microsoft/deberta-v3-base \
+  --pruning_params layer.*.attention.output.dense.weight layer.*.attention.self.query_proj.weight layer.*.attention.self.key_proj.weight layer.*.attention.self.value_proj.weight layer.*.intermediate.dense.weight layer.*.output.dense.weight \
+  --dataset_name squad \
+  --model_name_or_path bert-base-uncased \
+  --output_dir ./checkpoints/SQuAD/${sparsity}/${seed} \
+  --per_device_train_batch_size 16 \
+  --per_device_eval_batch_size 64 \
+  --learning_rate 5e-5 \
+  --alpha_f 0.1 \
+  --num_train_epochs 10 \
+  --seed ${seed} \
+  --checkpointing_steps 2500 \
+  --with_tracking \
+  --report_to wandb \
+  --sigma0 1e-10 \
+  --sigma1 0.05 \
+  --lambda_mix 1e-1 \
+  --alpha_i_lambda_mix 1.0 \
+  --alpha_f_lambda_mix 0.001 \
+  --initial_warmup_steps 11000 \
+  --sparse_finetune_steps 0 \
+  --pruning_interval 100 \
+  --initial_sparsity 0.5 \
+  --final_sparsity ${sparsity} \
+  --log_interval 1000
+
