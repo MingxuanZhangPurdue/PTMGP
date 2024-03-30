@@ -1,9 +1,5 @@
 #!/bin/bash
 
-module purge
-module load anaconda
-conda activate testenv
-
 seed=47
 sparsity=0.9
 
@@ -19,10 +15,10 @@ composer -m -n 4 upstream.train \
   --max_duration 5ep \
   --per_device_train_batch_size 64 \
   --per_device_train_microbatch_size 64 \
-  --learning_rate 3e-4 \
+  --learning_rate 5e-4 \
   --alpha_f 0.01 \
   --sigma0 1e-10 \
-  --sigma1 0.05 \
+  --sigma1 0.01 \
   --lambda_mix 1e-1 \
   --alpha_i_lambda_mix 1.0 \
   --alpha_f_lambda_mix 0.001 \
@@ -32,9 +28,9 @@ composer -m -n 4 upstream.train \
   --seed ${seed} \
   --initial_sparsity 0.3 \
   --final_sparsity ${sparsity} \
-  --run_name ${sparsity}_${seed}_run4 \
-  --save_folder ./checkpoints/upstream/${sparsity}/${seed}_run4 \
-  --save_interval 0.01dur \
-  --eval_interval 1ep \
+  --run_name ${sparsity}_${seed} \
+  --save_folder ./checkpoints/upstream/${sparsity}/${seed} \
+  --save_interval 1ep \
+  --eval_interval 1dur \
   --log_interval 2000 \
   --autoresume
